@@ -1,0 +1,16 @@
+{
+  "name": "ra-jewellers-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Working demo of a jewellery-store management system: Order-centred billing, gold-rate aware settlement, inventory and customer ledger.",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch --watch-path=src --watch-path=server.js server.js",
+    "reset": "node --disable-warning=ExperimentalWarning scripts/reset.js",
+    "resync-supabase": "node --disable-warning=ExperimentalWarning scripts/resync-supabase.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js"
+  }
+}
