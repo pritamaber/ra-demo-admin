@@ -218,17 +218,25 @@ function newTransactionPage(mode) {
       }
       mount(custBox, html`<div class="field"><label for="cust-phone">Customer phone number</label>
         <div class="row"><input id="cust-phone" inputmode="numeric" placeholder="10-digit mobile number" style="max-width:280px"><button class="btn" id="find-cust">Find customer</button></div>
-        <div class="hint">Phone number is the unique customer key. New numbers can be added on the spot.</div>
+        <div class="hint">Type the 10-digit number and the customer is found automatically. New numbers can be added on the spot.</div>
         <div class="form-error" id="cust-error"></div></div>`);
+      let searching = false;
       const find = async () => {
         const phone = $('#cust-phone', custBox).value.replace(/\D/g, '');
         if (phone.length < 10) { $('#cust-error', custBox).textContent = 'Enter the 10-digit mobile number'; return; }
+        if (searching) return;
+        searching = true;
         try { st.customer = await api.get('/api/customers/lookup', { phone }); }
-        catch (err) { if (err.status === 404) st.newCustomer = { phone: phone.slice(-10) }; else { $('#cust-error', custBox).textContent = err.message; return; } }
+        catch (err) { searching = false; if (err.status === 404) st.newCustomer = { phone: phone.slice(-10) }; else { $('#cust-error', custBox).textContent = err.message; return; } }
         renderCustomer();
       };
       $('#find-cust', custBox).onclick = find;
       $('#cust-phone', custBox).addEventListener('keydown', (e) => { if (e.key === 'Enter') find(); });
+      // Search by itself as soon as a full 10-digit number is in the box.
+      $('#cust-phone', custBox).addEventListener('input', (e) => {
+        $('#cust-error', custBox).textContent = '';
+        if (e.target.value.replace(/\D/g, '').length >= 10) find();
+      });
     }
     renderCustomer();
 
