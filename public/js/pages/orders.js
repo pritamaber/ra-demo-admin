@@ -195,6 +195,41 @@ function newTransactionPage(mode) {
         </div>
       </div>`);
 
+    // ---- customer list: browse or search every customer and tap one to select them
+    function openCustomerPicker() {
+      const { close } = openModal({
+        title: 'Select customer',
+        size: 'wide',
+        content: html`<input id="cl-search" type="search" placeholder="Search by name, phone or city…" autocomplete="off" style="margin-bottom:12px">
+          <div class="muted small" id="cl-count" style="margin-bottom:8px"></div>
+          <div class="cust-list" id="cl-body"></div>`,
+        onOpen: (m) => {
+          let seqNo = 0;
+          const load = async (text = '') => {
+            const mine = ++seqNo;
+            try {
+              const { items } = await api.get('/api/customers', { q: text, limit: 200 });
+              if (mine !== seqNo) return;
+              $('#cl-count', m).textContent = `${items.length} customer${items.length === 1 ? '' : 's'}${text ? ' found' : ''}`;
+              mount($('#cl-body', m), items.length ? html`${items.map((c) => html`<button type="button" class="cust-pick" data-id="${c.id}">
+                <span class="avatar">${initials(c.name)}</span>
+                <span class="cust-pick-main"><b>${c.name}</b><small>${c.phone}${c.city ? ' · ' + c.city : ''}</small></span>
+                ${c.total_outstanding > 0 ? html`<span class="cust-pick-due">${inr(c.total_outstanding)} due</span>` : ''}
+              </button>`)}` : empty('No customers found', 'Try another name or number — or type a new number to add the customer.'));
+              $$('.cust-pick', m).forEach((b) => b.addEventListener('click', () => {
+                st.customer = items.find((c) => String(c.id) === b.dataset.id);
+                st.newCustomer = null;
+                close();
+                renderCustomer();
+              }));
+            } catch (err) { toast(err.message, 'error'); }
+          };
+          $('#cl-search', m).addEventListener('input', debounce((e) => load(e.target.value.trim()), 200));
+          load();
+        },
+      });
+    }
+
     // ---- customer step
     const custBox = $('#cust-box', el);
     function renderCustomer() {
@@ -221,7 +256,8 @@ function newTransactionPage(mode) {
         return;
       }
       mount(custBox, html`<div class="field"><label for="cust-phone">Customer phone number</label>
-        <div class="row"><input id="cust-phone" inputmode="numeric" placeholder="10-digit mobile number" style="max-width:280px"><button class="btn" id="find-cust">Find customer</button></div>
+        <div class="row"><input id="cust-phone" inputmode="numeric" placeholder="10-digit mobile number" style="max-width:280px"><button class="btn" id="find-cust">Find customer</button>
+          <button type="button" class="btn" id="cust-list">${icon('customers')} Customer list</button></div>
         <div class="hint">Type the 10-digit number and the customer is found automatically. New numbers can be added on the spot.</div>
         <div class="form-error" id="cust-error"></div></div>`);
       let searching = false;
@@ -235,6 +271,7 @@ function newTransactionPage(mode) {
         renderCustomer();
       };
       $('#find-cust', custBox).onclick = find;
+      $('#cust-list', custBox).onclick = () => openCustomerPicker();
       $('#cust-phone', custBox).addEventListener('keydown', (e) => { if (e.key === 'Enter') find(); });
       // Search by itself as soon as a full 10-digit number is in the box.
       $('#cust-phone', custBox).addEventListener('input', (e) => {
