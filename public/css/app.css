@@ -503,11 +503,8 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
   .filters-sep { display: none; }
   .row > select, .row > input:not([type=checkbox]):not([type=radio]) { flex: 1 1 160px; }
   form.row input, form.row .btn { flex: 1 1 100%; width: 100% !important; }
-  .chips { flex-wrap: nowrap; overflow-x: auto; margin: 0 -12px; padding: 2px 12px 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-  .chips::-webkit-scrollbar { display: none; }
-  .card .chips { margin: 0 -14px; padding: 2px 14px 6px; }
-  .filters .chips { margin: 0 -12px; padding: 2px 12px 6px; }
-  .chip { flex: none; }
+  .chips { gap: 8px; }
+  .chip { padding: 8px 13px; min-height: 38px; }
   .tabs { margin: 0 -12px 14px; padding: 0 12px; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
   [style*="max-width"] { max-width: 100% !important; }
