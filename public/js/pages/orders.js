@@ -24,7 +24,7 @@ export async function ordersListPage({ el, query, isCurrent }) {
   const countMap = Object.fromEntries(counts);
 
   mount(el, html`
-    <div class="page-head">
+    <div class="page-head dash-head">
       <div><h1>Orders</h1><div class="sub">Every sale starts here — from advance to delivery to final bill.</div></div>
       <div class="page-actions"><a class="btn btn-primary" href="#/orders/new">+ New Order</a></div>
     </div>
