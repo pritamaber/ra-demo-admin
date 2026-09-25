@@ -92,11 +92,32 @@ function labelCells(root) {
     }));
   });
 }
+// On phones a long tab row becomes one dropdown (the tab buttons stay in the DOM and do the work).
+function enhanceTabs(root) {
+  root.querySelectorAll('.tabs').forEach((bar) => {
+    const tabs = [...bar.querySelectorAll('.tab')];
+    if (tabs.length < 2) return;
+    const labels = tabs.map((t) => `${t.firstChild?.textContent.trim() || t.textContent.trim()}${t.querySelector('.n') ? ` (${t.querySelector('.n').textContent.trim()})` : ''}`);
+    const on = Math.max(0, tabs.findIndex((t) => t.classList.contains('on')));
+    let sel = bar.previousElementSibling?.classList.contains('tabs-select') ? bar.previousElementSibling : null;
+    if (!sel) {
+      sel = document.createElement('select');
+      sel.className = 'tabs-select';
+      sel.setAttribute('aria-label', 'Switch section');
+      sel.addEventListener('change', () => bar.querySelectorAll('.tab')[sel.selectedIndex]?.click());
+      bar.before(sel);
+    }
+    const sig = labels.join('|') + '#' + on;
+    if (sel.dataset.sig === sig) return;
+    sel.dataset.sig = sig;
+    sel.innerHTML = labels.map((l, i) => `<option ${i === on ? 'selected' : ''}>${l.replace(/</g, '&lt;')}</option>`).join('');
+  });
+}
 let labelQueued = false;
 new MutationObserver(() => {
   if (labelQueued) return;
   labelQueued = true;
-  requestAnimationFrame(() => { labelQueued = false; labelCells(document); });
+  requestAnimationFrame(() => { labelQueued = false; labelCells(document); enhanceTabs(document); });
 }).observe(document.body, { childList: true, subtree: true });
 
 // ------------------------------------------------------------- gold rate chips
