@@ -193,14 +193,17 @@ export async function catalogPage({ el, isCurrent }) {
       <div><h1>Master Catalog</h1><div class="sub">Every piece the shop sells — by customer, category and subcategory.</div></div>
       <div class="page-actions"><button class="btn btn-primary" id="add-product">+ Add product</button></div>
     </div>
-    <div class="filters card">
+    <div class="filters card catalog-filters">
+      <input id="f-q-m" class="only-phone" aria-label="Search" placeholder="Search name, SKU or barcode">
+      <select id="m-gender" class="only-phone" aria-label="Customer">${['', ...GENDERS].map((g) => html`<option value="${g}">${g || 'All customers'}</option>`)}</select>
+      <select id="m-cat" class="only-phone" aria-label="Category"><option value="">All categories</option>${categories.map((c) => html`<option value="${c.id}">${c.name} (${c.product_count})</option>`)}</select>
       <div class="chips" id="gender-chips">
         ${['', ...GENDERS].map((g) => html`<button class="chip ${g === '' ? 'on' : ''}" data-gender="${g}">${g || 'All'}</button>`)}</div>
       <span class="filters-sep"></span>
       <select id="f-sub" aria-label="Subcategory" disabled><option value="">All subcategories</option></select>
       <select id="f-purity" aria-label="Purity"><option value="">Any purity</option>${purities.map((x) => html`<option>${x}</option>`)}</select>
       <select id="f-stock" aria-label="Stock"><option value="">Any stock</option><option value="IN_STOCK">In stock</option><option value="LOW_STOCK">Low stock</option><option value="OUT_OF_STOCK">Out of stock</option></select>
-      <input id="f-q" aria-label="Search" placeholder="Search name, SKU or barcode" style="flex:1;min-width:180px">
+      <input id="f-q" class="hide-phone" aria-label="Search" placeholder="Search name, SKU or barcode" style="flex:1;min-width:180px">
     </div>
     <div class="chips" id="cat-chips" style="margin:-4px 0 14px">
       <button class="chip on" data-cat="">All categories</button>
@@ -260,6 +263,10 @@ export async function catalogPage({ el, isCurrent }) {
   $('#f-sub', el).addEventListener('change', (e) => { f.subcategory_id = e.target.value; load(); });
   $('#f-purity', el).addEventListener('change', (e) => { f.purity = e.target.value; load(); });
   $('#f-stock', el).addEventListener('change', (e) => { f.stock_status = e.target.value; load(); });
+  // Phone dropdowns drive the (hidden) chips so both stay in sync.
+  $('#m-gender', el).addEventListener('change', (e) => $(`[data-gender="${e.target.value}"]`, el)?.click());
+  $('#m-cat', el).addEventListener('change', (e) => $(`[data-cat="${e.target.value}"]`, el)?.click());
+  $('#f-q-m', el).addEventListener('input', debounce((e) => { f.q = e.target.value.trim(); load(); }, 250));
   $('#f-q', el).addEventListener('input', debounce((e) => { f.q = e.target.value.trim(); load(); }, 250));
   $('#add-product', el).addEventListener('click', () => openProductForm({ categories, purities, makingMethod, onSaved: load }));
   await load();

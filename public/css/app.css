@@ -408,7 +408,7 @@ textarea { resize: vertical; min-height: 60px; }
 .inv-small { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
 
 /* ------------------------------------------------------- responsive shell */
-.menu-btn, .topbar-brand, .bottom-nav, .scrim, .tabs-select { display: none; }
+.menu-btn, .topbar-brand, .bottom-nav, .scrim, .tabs-select, .only-phone { display: none; }
 .menu-btn { width: 44px; height: 44px; border: 1px solid var(--line); background: #fff; border-radius: 10px; color: var(--ink); cursor: pointer; place-items: center; flex: none; }
 html { -webkit-text-size-adjust: 100%; }
 body { overflow-x: hidden; }
@@ -512,6 +512,11 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
   form.row input, form.row .btn { flex: 1 1 100%; width: 100% !important; }
   .chips { gap: 8px; }
   .chip { padding: 8px 13px; min-height: 38px; }
+  .only-phone { display: block; }
+  .hide-phone, .catalog-filters .chips, #cat-chips { display: none !important; }
+  .catalog-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; margin-bottom: 12px; }
+  .catalog-filters > #f-q-m { grid-column: 1 / -1; }
+  .catalog-filters select, .catalog-filters input { min-height: 42px; padding: 9px 10px; font-size: 15px; }
   .tabs-select { display: block; margin-bottom: 14px; font-weight: 600; color: var(--maroon); border-color: var(--maroon); }
   .tabs-select + .tabs { display: none; }
   [style*="max-width"] { max-width: 100% !important; }
