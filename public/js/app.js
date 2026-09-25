@@ -137,7 +137,7 @@ document.addEventListener('click', (e) => {
 
 // Tables collapse into stacked cards on phones (CSS); label each cell from its column header.
 function labelCells(root) {
-  root.querySelectorAll('table.tbl').forEach((t) => {
+  root.querySelectorAll('table.tbl, table.inv-table').forEach((t) => {
     const heads = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim());
     if (!heads.length) return;
     t.querySelectorAll('tbody tr').forEach((tr) => [...tr.children].forEach((td, i) => {

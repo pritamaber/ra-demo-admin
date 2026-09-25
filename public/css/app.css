@@ -244,6 +244,11 @@ textarea { resize: vertical; min-height: 60px; }
 .modal { background: #fff; border-radius: 14px; width: 100%; max-width: 560px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
 .modal.wide { max-width: 760px; }
 .modal.xl { max-width: 940px; }
+.modal-backdrop:has(.modal.full) { padding: 0; place-items: stretch; }
+.modal.full { max-width: none; width: 100%; min-height: 100vh; border-radius: 0; display: flex; flex-direction: column; }
+.modal.full .modal-body { flex: 1; background: var(--bg); }
+.modal.full .modal-head { background: #fff; position: sticky; top: 0; z-index: 3; }
+.preview-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--line-2); }
 .modal-body { padding: 18px 20px 20px; }
 .modal-text { line-height: 1.55; }
@@ -609,6 +614,8 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); }
   .modal-body { padding: 14px 16px 18px; }
   .modal-actions { flex-direction: column-reverse; gap: 8px; position: sticky; bottom: 0; background: #fff; padding-top: 10px; margin-top: 16px; }
   .modal-actions .btn { width: 100%; }
+  .modal.full { max-height: none; min-height: 100vh; min-height: 100dvh; border-radius: 0; animation: none; }
+  .modal-backdrop:has(.modal.full) { overflow-y: auto; }
   @keyframes sheet { from { transform: translateY(40px); opacity: .4; } }
   #toast-root { left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); align-items: stretch; }
   .toast { max-width: none; }
@@ -628,6 +635,19 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); }
   .bottom-nav a.active { color: var(--maroon); }
   .bottom-nav .bn-new { color: var(--maroon); }
   .bottom-nav .bn-new svg { background: var(--maroon); color: #fff; border-radius: 50%; padding: 6px; width: 34px; height: 34px; margin-top: -14px; box-shadow: 0 3px 10px rgba(122, 31, 43, .4); }
+}
+
+/* Bills, estimates and slips on a phone: item rows stack as small cards instead of scrolling sideways */
+@media screen and (max-width: 767px) {
+  .inv-table { display: block; overflow: visible; white-space: normal; }
+  .inv-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .inv-table tbody { display: block; }
+  .inv-table tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
+  .inv-table td { display: block; padding: 0; border: 0; text-align: left; min-width: 0; overflow-wrap: anywhere; }
+  .inv-table td.num { text-align: left; }
+  .inv-table td::before { content: attr(data-label); display: block; font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .inv-table td:first-child { grid-column: 1 / -1; font-size: 14px; }
+  .inv-table td:first-child::before, .inv-table td:not([data-label])::before { display: none; }
 }
 
 /* small phones (360px Android etc.) keep two product columns */
@@ -659,4 +679,12 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); }
   .invoice { border: 0; box-shadow: none; padding: 0; max-width: none; }
   .invoice-wrap { display: block; }
   .inv-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Printing from the full-screen preview: show only the document */
+  body.print-modal .app { display: none !important; }
+  body.print-modal #modal-root { display: block !important; }
+  body.print-modal .modal-backdrop { position: static; display: block; padding: 0; background: none; overflow: visible; }
+  body.print-modal .modal { box-shadow: none; max-width: none; min-height: 0; border-radius: 0; animation: none; }
+  body.print-modal .modal-head, body.print-modal .no-print { display: none !important; }
+  body.print-modal .modal-body { padding: 0; background: #fff; }
+  body.print-modal .invoice { border: 0; box-shadow: none; padding: 0; max-width: none; }
 }

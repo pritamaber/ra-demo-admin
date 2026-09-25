@@ -172,7 +172,8 @@ function newTransactionPage(mode) {
 
         <div class="summary stack">
           <div class="card"><div class="card-head"><div class="step-title"><span class="step-no">4</span><h2>${isSale ? 'Bill total' : 'Price'}</h2></div>
-            <span class="muted small" id="rate-note"></span></div>
+            <div class="row" style="gap:8px"><span class="muted small" id="rate-note"></span>
+              <button type="button" class="btn btn-sm" id="preview-btn" title="${isSale ? 'View the bill' : 'View the order slip and bill'} before saving" aria-label="Preview">${icon('eye')} Preview</button></div></div>
             <div class="card-body" id="summary-figures"><div class="muted">Choose a product to see the price.</div></div></div>
 
           <div class="card"><div class="card-head"><div class="step-title"><span class="step-no">5</span><h2>${isSale ? 'Payment (in full)' : 'Payment now'}</h2></div></div>
@@ -393,6 +394,112 @@ function newTransactionPage(mode) {
     const recalcSoon = debounce(recalc, 300);
     $('#f-other', el).addEventListener('input', recalcSoon);
     if (st.lines[0].product_id) recalc();
+
+    // ---- preview: a full-screen view of the bill / order slip exactly as it stands right now (nothing is saved)
+    let shopCache = null;
+    async function openPreview() {
+      if (!st.preview) { toast('Add at least one product to preview the bill', 'error'); return; }
+      try { shopCache ||= (await api.get('/api/settings')).values; } catch (e) { toast(e.message, 'error'); return; }
+      const shop = shopCache;
+      const p = st.preview;
+      const t = p.totals;
+      const c = st.customer || { name: $('#nc-name', el)?.value.trim() || '', phone: st.newCustomer?.phone || '', address: $('#nc-addr', el)?.value.trim() || '', city: $('#nc-city', el)?.value.trim() || '' };
+      const delivery = isSale ? null : $('#f-delivery', el).value;
+      const method = $('#f-method', el).value;
+      const paidNow = isSale ? t.total : Math.min(Number($('#f-adv', el)?.value) || 0, t.total);
+      const otherNote = $('#f-other-note', el).value.trim();
+      const rates = [...new Set(p.lines.map((l) => `${l.purity} ${inr(l.gold_rate)}/g`))].join(' · ');
+      const cgst = t.gst / 2;
+      const view = { tab: 'bill' };
+
+      const itemsTable = (slip) => html`<table class="inv-table">
+        <thead><tr><th>Item</th><th>Purity</th><th class="num">Gross wt</th><th class="num">Stone wt</th><th class="num">Net gold wt</th><th class="num">Gold rate</th><th class="num">Gold value</th><th class="num">Making charge</th></tr></thead>
+        <tbody>${p.lines.map((l) => html`<tr>
+          <td><b>${l.name}</b>${l.quantity > 1 ? ` × ${l.quantity}` : ''}${l.description ? html`<div class="inv-small" style="margin:2px 0 0">${l.description}</div>` : ''}<div class="inv-small" style="margin:2px 0 0">SKU ${l.sku}</div></td>
+          <td>${l.purity}</td><td class="num">${grams(l.gross_weight * l.quantity)}</td><td class="num">${grams(l.stone_weight * l.quantity)}</td>
+          <td class="num"><b>${grams(l.net_weight_total)}</b></td><td class="num">${perGram(l.gold_rate)}</td><td class="num">${inr2(l.gold_value)}</td>
+          <td class="num">${inr2(l.making_charge)}<div class="inv-small" style="margin:2px 0 0">${perGram(l.making_rate)}</div></td></tr>`)}</tbody></table>`;
+
+      const payBox = html`<div class="inv-box">
+        <h5>Payment${isSale ? '' : ' (planned)'}</h5>
+        ${paidNow > 0 ? html`<div class="kv"><span class="k">${isSale ? 'Paid in full' : 'Paid now'} (${method})</span><span class="v">${inr2(paidNow)}</span></div>` : html`<div class="muted small">Nothing paid yet.</div>`}
+        <div class="kv total" style="margin-top:8px"><span class="k">Balance due</span><span class="v">${inr2(Math.max(t.total - paidNow, 0))}</span></div>
+      </div>`;
+
+      const billView = () => html`<article class="invoice">
+        <header class="inv-head">
+          <div><div class="inv-shop">${shop.shop_name}</div><div class="inv-tag">${shop.shop_tagline}</div>
+            <div class="inv-small" style="margin-top:8px">${shop.shop_address}<br>Phone: ${shop.shop_phone} · GSTIN: ${shop.shop_gstin}</div></div>
+          <div class="inv-title"><h2>${isSale ? 'BILL — PREVIEW' : 'ORDER ESTIMATE'}</h2>
+            <div style="margin-top:8px"><b>Not saved yet</b></div><div class="inv-small">Prepared ${fmtDate(todayIso())}</div></div>
+        </header>
+        <section class="inv-meta">
+          <div><h5>Billed to</h5>${c.name || c.phone ? html`<div class="bold" style="font-size:15px">${c.name || '—'}</div><div>Phone: ${c.phone || '—'}</div>${c.address || c.city ? html`<div>${[c.address, c.city].filter(Boolean).join(', ')}</div>` : ''}` : html`<div class="muted">Customer not selected yet</div>`}</div>
+          <div><h5>${isSale ? 'Sale details' : 'Order details'}</h5>
+            <div>${isSale ? 'Sale date' : 'Order date'}: ${fmtDate(todayIso())}</div>${delivery ? html`<div>Delivery date: ${fmtDate(delivery)}</div>` : ''}
+            <div>Gold rate today: ${rates}</div></div>
+        </section>
+        ${itemsTable(false)}
+        <div class="inv-cols">
+          ${payBox}
+          <div class="inv-box">
+            <h5>Amount</h5>
+            <div class="kv"><span class="k">Gold value</span><span class="v">${inr2(t.gold_value)}</span></div>
+            <div class="kv"><span class="k">Making charges</span><span class="v">${inr2(t.making_charge)}</span></div>
+            ${t.other_charges ? html`<div class="kv"><span class="k">Other charges${otherNote ? ` (${otherNote})` : ''}</span><span class="v">${inr2(t.other_charges)}</span></div>` : ''}
+            <div class="kv"><span class="k">CGST @ ${p.gst_rate / 2}%</span><span class="v">${inr2(cgst)}</span></div>
+            <div class="kv"><span class="k">SGST @ ${p.gst_rate / 2}%</span><span class="v">${inr2(t.gst - cgst)}</span></div>
+            <div class="inv-total"><span>Total amount</span><span>${inr2(t.total)}</span></div>
+          </div>
+        </div>
+        <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${p.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}. ${isSale ? '' : 'The gold rate is fixed on the order date.'}</p>
+      </article>`;
+
+      const slipView = () => html`<article class="invoice">
+        <header class="inv-head">
+          <div><div class="inv-shop">Order Slip</div><div class="inv-tag">Internal use — workshop / delivery copy</div></div>
+          <div class="inv-title"><h2>PREVIEW</h2><div class="inv-small" style="margin-top:6px">${isSale ? 'Sale date' : 'Order date'}: ${fmtDate(todayIso())}</div>
+            ${delivery ? html`<div class="inv-small">Delivery date: ${fmtDate(delivery)}</div>` : ''}</div>
+        </header>
+        ${itemsTable(true)}
+        <div class="inv-cols">
+          ${payBox}
+          <div class="inv-box"><h5>Amount</h5>
+            <div class="kv"><span class="k">Gold value</span><span class="v">${inr2(t.gold_value)}</span></div>
+            <div class="kv"><span class="k">Making charges</span><span class="v">${inr2(t.making_charge)}</span></div>
+            <div class="kv"><span class="k">GST @ ${p.gst_rate}%</span><span class="v">${inr2(t.gst)}</span></div>
+            ${t.other_charges ? html`<div class="kv"><span class="k">Other charges</span><span class="v">${inr2(t.other_charges)}</span></div>` : ''}
+            <div class="inv-total"><span>Total</span><span>${inr2(t.total)}</span></div></div>
+        </div>
+        <div class="inv-foot"><div class="inv-small" style="margin:0;max-width:430px">Internal order slip for workshop and delivery use. Deliberately excludes customer name, address and phone number.</div></div>
+      </article>`;
+
+      openModal({
+        title: 'Preview',
+        size: 'full',
+        content: html`<div class="preview-bar no-print">
+            <div class="chips" id="pv-tabs"><button type="button" class="chip on" data-tab="bill">${isSale ? 'Bill' : 'Estimate'}</button><button type="button" class="chip" data-tab="slip">Order slip</button></div>
+            <button type="button" class="btn btn-primary btn-sm" id="pv-print">${icon('print')} Print / Save as PDF</button>
+          </div>
+          <div class="notice warn no-print" style="margin-bottom:14px">Preview only — nothing is saved until you ${isSale ? 'create the bill' : 'place the order'}.</div>
+          <div class="invoice-wrap" id="pv-body"></div>`,
+        onOpen: (m) => {
+          const draw = () => mount($('#pv-body', m), view.tab === 'bill' ? billView() : slipView());
+          draw();
+          $$('#pv-tabs .chip', m).forEach((b) => b.addEventListener('click', () => {
+            view.tab = b.dataset.tab;
+            $$('#pv-tabs .chip', m).forEach((x) => x.classList.toggle('on', x === b));
+            draw();
+          }));
+          $('#pv-print', m).addEventListener('click', () => {
+            document.body.classList.add('print-modal');
+            window.addEventListener('afterprint', () => document.body.classList.remove('print-modal'), { once: true });
+            window.print();
+          });
+        },
+      });
+    }
+    $('#preview-btn', el).onclick = openPreview;
 
     // ---- submit
     $('#submit-btn', el).onclick = async () => {
