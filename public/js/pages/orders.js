@@ -77,10 +77,13 @@ export async function ordersListPage({ el, query, isCurrent }) {
 function newTransactionPage(mode) {
   const isSale = mode === 'sale';
   return async function page({ el, query, isCurrent }) {
-    const { items: products } = await api.get('/api/products', { status: 'active', limit: 500, sort: 'category' });
+    const [{ items: products }, { items: rates }] = await Promise.all([
+      api.get('/api/products', { status: 'active', limit: 500, sort: 'category' }),
+      api.get('/api/gold-rates/current'),
+    ]);
     if (!isCurrent()) return;
 
-    const st = { customer: null, newCustomer: null, lines: [{ product_id: query.product || '', quantity: 1 }], preview: null };
+    const st = { customer: null, newCustomer: null, lines: [{ product_id: query.product || '', quantity: 1, edits: {} }], preview: null };
     if (query.customer) st.customer = (await api.get(`/api/customers/${query.customer}`)).customer;
     else if (query.phone) {
       const phone = query.phone.replace(/\D/g, '').slice(-10);
@@ -241,43 +244,92 @@ function newTransactionPage(mode) {
     renderCustomer();
 
     // ---- product lines
+    // Every line starts from the catalogue product; whatever the shopkeeper changes is kept in `edits`
+    // and applies to this order only. Only edits are sent, so untouched values follow the catalogue / today's rate.
+    const PURITIES = ['24K', '22K', '18K'];
+    const rateOf = (purity) => rates.find((r) => r.purity === purity)?.rate_per_gram ?? '';
+    const productOf = (l) => products.find((p) => String(p.id) === String(l.product_id));
+    const defaultsOf = (l) => {
+      const p = productOf(l);
+      const purity = l.edits.purity ?? p.purity;
+      return { name: p.name, description: '', purity: p.purity, gross_weight: p.gross_weight, stone_weight: p.stone_weight, making_rate: p.making_charge, gold_rate: rateOf(purity) };
+    };
+    const valueOf = (l, key) => (l.edits[key] !== undefined ? l.edits[key] : defaultsOf(l)[key]);
+    const netOf = (l) => Math.round((Number(valueOf(l, 'gross_weight')) - Number(valueOf(l, 'stone_weight'))) * 1000) / 1000;
+    const NUMERIC = ['gross_weight', 'stone_weight', 'making_rate', 'gold_rate'];
+    function setEdit(l, key, value) {
+      const def = defaultsOf(l)[key];
+      const same = NUMERIC.includes(key) ? Number(value) === Number(def) : String(value).trim() === String(def);
+      if (same || value === '') delete l.edits[key]; else l.edits[key] = value;
+    }
+
     const linesBox = $('#lines-box', el);
+    const lineField = (l, key, label) => html`<div class="field"><label>${label}</label>
+      <input data-e="${key}" type="number" min="0" step="${key === 'gold_rate' || key === 'making_rate' ? 1 : 0.001}" value="${valueOf(l, key)}"></div>`;
     function renderLines() {
       mount(linesBox, html`${st.lines.map((l, i) => {
-        const chosen = products.find((p) => String(p.id) === String(l.product_id));
-        return html`<div class="line-row" data-i="${i}">
-          <div class="field"><label>${st.lines.length > 1 ? `Item ${i + 1}` : 'Product'}</label>
-            <button type="button" class="product-picker-btn" data-pick>
-              ${chosen ? html`<img class="thumb" src="${chosen.image}" alt=""><span>${chosen.name}</span>` : html`<span class="muted">Select a product…</span>`}
-            </button>
-            <div class="hint" data-hint></div></div>
-          <div class="field"><label>Qty</label><input data-f="quantity" type="number" min="1" max="20" value="${l.quantity}"></div>
-          <button class="icon-btn" data-remove title="Remove item" ${st.lines.length === 1 ? 'disabled' : ''}>×</button>
+        const chosen = productOf(l);
+        return html`<div class="line-card" data-i="${i}">
+          <div class="line-row">
+            <div class="field"><label>${st.lines.length > 1 ? `Item ${i + 1}` : 'Product'}</label>
+              <button type="button" class="product-picker-btn" data-pick>
+                ${chosen ? html`<img class="thumb" src="${chosen.image}" alt=""><span>${chosen.name}</span>` : html`<span class="muted">Select a product…</span>`}
+              </button></div>
+            <div class="field"><label>Qty</label><input data-f="quantity" type="number" min="1" max="20" value="${l.quantity}"></div>
+            <button class="icon-btn" data-remove title="Remove item" ${st.lines.length === 1 ? 'disabled' : ''}>×</button>
+          </div>
+          ${chosen ? html`<details class="item-details" open>
+            <summary>Item details <span class="muted small">— edit anything for this order; the catalogue is not changed</span></summary>
+            <div class="item-fields">
+              <div class="field span"><label>Item name (as on the bill)</label><input data-e="name" value="${valueOf(l, 'name')}"></div>
+              <div class="field span"><label>Description</label><textarea data-e="description" rows="2" placeholder="Optional — design, size, remarks…">${valueOf(l, 'description')}</textarea></div>
+              <div class="field"><label>Purity</label><select data-e="purity">${PURITIES.map((x) => html`<option ${x === valueOf(l, 'purity') ? 'selected' : ''}>${x}</option>`)}</select></div>
+              ${lineField(l, 'gold_rate', 'Gold rate (₹/g)')}
+              ${lineField(l, 'gross_weight', 'Gross weight (g)')}
+              ${lineField(l, 'stone_weight', 'Stone weight (g)')}
+              <div class="field"><label>Net gold weight (g)</label><input data-net readonly value="${netOf(l).toFixed(3)}"></div>
+              ${lineField(l, 'making_rate', 'Making charge (₹/g)')}
+            </div>
+          </details>
+          <div class="hint" data-hint></div>` : ''}
         </div>`;
       })}`);
       updateHints();
-      $$('.line-row', linesBox).forEach((row) => {
-        const i = Number(row.dataset.i);
-        $('[data-pick]', row).addEventListener('click', () => {
+      $$('.line-card', linesBox).forEach((card) => {
+        const i = Number(card.dataset.i);
+        const l = st.lines[i];
+        $('[data-pick]', card).addEventListener('click', () => {
           openProductPicker({
-            selectedId: Number(st.lines[i].product_id) || null,
-            onPick: (id) => { st.lines[i].product_id = id; renderLines(); recalc(); },
+            selectedId: Number(l.product_id) || null,
+            onPick: (id) => { l.product_id = id; l.edits = {}; renderLines(); recalc(); },
           });
         });
-        $('[data-f=quantity]', row).addEventListener('input', (e) => { st.lines[i].quantity = Math.max(1, Number(e.target.value) || 1); recalc(); });
-        $('[data-remove]', row).addEventListener('click', () => { st.lines.splice(i, 1); renderLines(); recalc(); });
+        $('[data-f=quantity]', card).addEventListener('input', (e) => { l.quantity = Math.max(1, Number(e.target.value) || 1); recalc(); });
+        $('[data-remove]', card).addEventListener('click', () => { st.lines.splice(i, 1); renderLines(); recalc(); });
+        $$('[data-e]', card).forEach((input) => {
+          const onEdit = () => {
+            setEdit(l, input.dataset.e, input.value);
+            const net = $('[data-net]', card);
+            if (net) net.value = netOf(l).toFixed(3);
+            if (input.dataset.e === 'purity' && l.edits.gold_rate === undefined) $('[data-e=gold_rate]', card).value = valueOf(l, 'gold_rate');
+            recalcSoon();
+          };
+          input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', onEdit);
+        });
       });
     }
-    // Per-line hints (weight, making rate, stock) are filled in place so typing is never interrupted.
+    // Per-line hints (stock) are filled in place so typing is never interrupted.
     function updateHints() {
-      $$('.line-row', linesBox).forEach((row) => {
-        const l = st.lines[Number(row.dataset.i)];
-        const pl = st.preview?.lines?.find((x) => String(x.product_id) === String(l.product_id));
-        $('[data-hint]', row).textContent = pl ? `Net ${grams(pl.net_weight_each)} · making ${perGram(pl.making_rate)} · ${pl.available} available${pl.shortage ? ' — not enough stock' : ''}` : '';
+      let k = 0;
+      $$('.line-card', linesBox).forEach((card) => {
+        const l = st.lines[Number(card.dataset.i)];
+        const pl = l.product_id ? st.preview?.lines?.[k++] : null;
+        const hint = $('[data-hint]', card);
+        if (hint) hint.textContent = pl ? `${pl.available} available in stock${pl.shortage ? ' — not enough stock for this order' : ''}${pl.edited ? ' · edited for this order' : ''}` : '';
       });
     }
     $('#add-line', el).onclick = () => {
-      const i = st.lines.push({ product_id: '', quantity: 1 }) - 1;
+      const i = st.lines.push({ product_id: '', quantity: 1, edits: {} }) - 1;
       renderLines();
       openProductPicker({ selectedId: null, onPick: (id) => { st.lines[i].product_id = id; renderLines(); recalc(); } });
     };
@@ -286,7 +338,14 @@ function newTransactionPage(mode) {
     // ---- live pricing (always computed by the server, so it matches what will be saved)
     const figures = $('#summary-figures', el);
     const payload = () => ({
-      items: st.lines.filter((l) => l.product_id).map((l) => ({ product_id: Number(l.product_id), quantity: Number(l.quantity) || 1 })),
+      items: st.lines.filter((l) => l.product_id).map((l) => {
+        const item = { product_id: Number(l.product_id), quantity: Number(l.quantity) || 1 };
+        for (const [key, value] of Object.entries(l.edits)) {
+          if (NUMERIC.includes(key)) { if (value !== '' && Number.isFinite(Number(value))) item[key] = Number(value); }
+          else item[key] = value;
+        }
+        return item;
+      }),
       other_charges: $('#f-other', el).value === '' ? null : Number($('#f-other', el).value),
     });
     let seq = 0;
@@ -331,7 +390,8 @@ function newTransactionPage(mode) {
       $('#f-adv', el).addEventListener('input', updateBalance);
       $('#pay-full', el).onclick = (e) => { e.preventDefault(); if (total() != null) { $('#f-adv', el).value = total(); updateBalance(); } };
     }
-    $('#f-other', el).addEventListener('input', debounce(recalc, 300));
+    const recalcSoon = debounce(recalc, 300);
+    $('#f-other', el).addEventListener('input', recalcSoon);
     if (st.lines[0].product_id) recalc();
 
     // ---- submit
@@ -440,7 +500,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
       <div class="card-head"><h2>Items</h2></div>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th>SKU · Barcode</th><th>Purity</th><th class="num">Qty</th><th class="num">Gross</th><th class="num">Stone</th><th class="num">Net gold</th></tr></thead>
         <tbody>${items.map((i) => html`<tr>
-          <td><div class="prod-cell"><img class="thumb" src="${i.image}" alt=""><button type="button" class="link-btn cell-main" data-view-product="${i.product_id}">${i.product_name}</button></div></td>
+          <td><div class="prod-cell"><img class="thumb" src="${i.image}" alt=""><div><button type="button" class="link-btn cell-main" data-view-product="${i.product_id}">${i.product_name}</button>${i.description ? html`<div class="cell-sub">${i.description}</div>` : ''}</div></div></td>
           <td><span class="mono">${i.sku}</span><div class="cell-sub mono">${i.barcode || ''}</div></td>
           <td>${i.purity} ${i.metal_type}</td><td class="num">${i.quantity}</td>
           <td class="num">${grams(i.gross_weight * i.quantity)}</td><td class="num">${grams(i.stone_weight * i.quantity)}</td>
@@ -620,7 +680,7 @@ export async function orderSlipPage({ el, params, isCurrent }) {
       <table class="inv-table">
         <thead><tr><th>Item</th><th>Purity</th><th class="num">Gross wt</th><th class="num">Stone wt</th><th class="num">Net gold wt</th><th class="num">Gold rate</th><th class="num">Gold value</th><th class="num">Making charge</th></tr></thead>
         <tbody>${items.map((i) => html`<tr>
-          <td><b>${i.product_name}</b>${i.quantity > 1 ? ` × ${i.quantity}` : ''}<div class="inv-small" style="margin:2px 0 0">SKU ${i.sku} · Barcode ${i.barcode || '—'}</div></td>
+          <td><b>${i.product_name}</b>${i.quantity > 1 ? ` × ${i.quantity}` : ''}${i.description ? html`<div class="inv-small" style="margin:2px 0 0">${i.description}</div>` : ''}<div class="inv-small" style="margin:2px 0 0">SKU ${i.sku} · Barcode ${i.barcode || '—'}</div></td>
           <td>${i.purity} ${i.metal_type}</td><td class="num">${grams(i.gross_weight * i.quantity)}</td><td class="num">${grams(i.stone_weight * i.quantity)}</td>
           <td class="num"><b>${grams(i.net_weight_total)}</b></td>
           <td class="num">${perGram(i.gold_rate)}</td><td class="num">${inr2(i.gold_value)}</td>

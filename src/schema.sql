@@ -122,7 +122,8 @@ CREATE TABLE IF NOT EXISTS order_items (
   order_id              INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
   product_id            INTEGER NOT NULL REFERENCES products(id),
   -- Product snapshot: the bill must show the piece as it was sold even if the catalogue changes later.
-  product_name          TEXT NOT NULL,
+  product_name          TEXT NOT NULL,                 -- as sold; the shopkeeper can edit it per order
+  description           TEXT,
   sku                   TEXT NOT NULL,
   barcode               TEXT,
   metal_type            TEXT NOT NULL,

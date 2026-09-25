@@ -358,6 +358,18 @@ textarea { resize: vertical; min-height: 60px; }
 
 /* ------------------------------------------------------------ new order */
 .line-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 34px; gap: 10px; align-items: end; margin-bottom: 10px; }
+.line-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #fffdf8; }
+.line-card:last-child { margin-bottom: 0; }
+.line-card .line-row { margin-bottom: 0; }
+.item-details { margin-top: 12px; }
+.item-details > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--maroon); list-style: none; }
+.item-details > summary::-webkit-details-marker { display: none; }
+.item-details > summary::before { content: "▾ "; }
+.item-details:not([open]) > summary::before { content: "▸ "; }
+.item-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px 12px; margin-top: 10px; }
+.item-fields .span { grid-column: 1 / -1; }
+.item-fields textarea { min-height: 0; resize: vertical; }
+.line-card .hint { margin-top: 8px; }
 .summary { position: sticky; top: 76px; }
 .sum-line { display: flex; justify-content: space-between; padding: 4px 0; gap: 10px; }
 .sum-total { display: flex; justify-content: space-between; padding: 12px 0 4px; border-top: 2px solid var(--ink); margin-top: 8px; font-size: 18px; font-weight: 700; }

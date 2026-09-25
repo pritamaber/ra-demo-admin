@@ -83,7 +83,7 @@ export async function billViewPage({ el, params, isCurrent }) {
       <table class="inv-table">
         <thead><tr><th>Item</th><th>Purity</th><th class="num">Gross wt</th><th class="num">Stone wt</th><th class="num">Net gold wt</th><th class="num">Gold rate</th><th class="num">Gold value</th><th class="num">Making charge</th></tr></thead>
         <tbody>${b.items.map((i) => html`<tr>
-          <td><b>${i.name}</b>${i.quantity > 1 ? ` × ${i.quantity}` : ''}<div class="inv-small" style="margin:2px 0 0">SKU ${i.sku} · Barcode ${i.barcode || '—'}</div></td>
+          <td><b>${i.name}</b>${i.quantity > 1 ? ` × ${i.quantity}` : ''}${i.description ? html`<div class="inv-small" style="margin:2px 0 0">${i.description}</div>` : ''}<div class="inv-small" style="margin:2px 0 0">SKU ${i.sku} · Barcode ${i.barcode || '—'}</div></td>
           <td>${i.purity} ${i.metal_type}</td><td class="num">${grams(i.gross_weight)}</td><td class="num">${grams(i.stone_weight)}</td><td class="num"><b>${grams(i.net_gold_weight)}</b></td>
           <td class="num">${perGram(i.gold_rate)}</td><td class="num">${inr2(i.gold_value)}</td>
           <td class="num">${inr2(i.making_charge)}<div class="inv-small" style="margin:2px 0 0">${i.making_description}</div></td></tr>`)}</tbody>

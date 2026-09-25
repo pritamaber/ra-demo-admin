@@ -38,7 +38,7 @@ function buildSnapshot(order, billNumber, billDate) {
     customer: { id: customer.id, name: customer.name, phone: customer.phone, address: customer.address, city: customer.city },
     gold_rate: order.order_gold_rate,
     items: items.map((it) => ({
-      name: it.product_name, sku: it.sku, barcode: it.barcode, metal_type: it.metal_type, purity: it.purity, quantity: it.quantity,
+      name: it.product_name, description: it.description, sku: it.sku, barcode: it.barcode, metal_type: it.metal_type, purity: it.purity, quantity: it.quantity,
       gross_weight: round3(it.gross_weight * it.quantity), stone_weight: round3(it.stone_weight * it.quantity),
       net_gold_weight: round3(it.net_gold_weight * it.quantity),
       gold_rate: it.gold_rate, gold_value: it.gold_value, making_charge: it.making_charge,

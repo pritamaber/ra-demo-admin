@@ -54,7 +54,7 @@ GST        = GST% × (gold value + making)                  → 3% by default
 total      = gold value + making + GST + other charges     (other charges: optional, no GST)
 ```
 
-Every amount is rounded to the rupee. The only pricing setting is the GST rate (Settings); a new rate applies to orders placed from then on.
+Every amount is rounded to the rupee. On the order form the shopkeeper can **edit each item for that order** — name, description, purity, gross/stone weight (net is calculated), making rate and gold rate — without touching the catalogue product. The only pricing setting is the GST rate (Settings); a new rate applies to orders placed from then on.
 Example: 10 g at ₹14,720/g with ₹850/g making → ₹1,47,200 + ₹8,500 + ₹4,671 GST = **₹1,60,371**.
 
 - Payments are stored as the **rupee amount received** (with method, date and reference) and are **append-only**: the database rejects edits and deletes.

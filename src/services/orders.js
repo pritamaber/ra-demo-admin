@@ -41,30 +41,62 @@ function logEvent(orderId, type, message) {
 const lineNetWeight = (it) => round3(it.net_gold_weight * it.quantity);
 
 // -------------------------------------------------------------------- quote
+/**
+ * Each line is a catalogue product plus optional per-order edits: name, description, purity, gross and stone
+ * weight, making rate (₹/g) and gold rate (₹/g). Edits change only this order — never the catalogue product.
+ */
 function normalizeLines(rawItems) {
   if (!Array.isArray(rawItems) || rawItems.length === 0) throw bad('Add at least one product to the order');
-  const merged = new Map();
-  for (const raw of rawItems) {
-    const productId = num(raw.product_id, 'Product', { integer: true, min: 1 });
-    const quantity = num(raw.quantity ?? 1, 'Quantity', { integer: true, min: 1, max: 100 });
-    merged.set(productId, (merged.get(productId) || 0) + quantity);
-  }
-  return [...merged].map(([product_id, quantity]) => ({ product_id, quantity }));
+  return rawItems.map((raw, i) => {
+    const at = `Item ${i + 1}`;
+    const line = {
+      product_id: num(raw.product_id, `${at}: product`, { integer: true, min: 1 }),
+      quantity: num(raw.quantity ?? 1, `${at}: quantity`, { integer: true, min: 1, max: 100 }),
+    };
+    const name = str(raw.name);
+    if (name) line.name = name.slice(0, 150);
+    const description = str(raw.description);
+    if (description) line.description = description.slice(0, 500);
+    if (raw.purity != null && raw.purity !== '') {
+      if (!goldRates.PURITIES.includes(raw.purity)) throw bad(`${at}: purity must be one of ${goldRates.PURITIES.join(', ')}`);
+      line.purity = raw.purity;
+    }
+    const numeric = (key, label, opts) => { if (raw[key] != null && raw[key] !== '') line[key] = num(raw[key], `${at}: ${label}`, opts); };
+    numeric('gross_weight', 'gross weight', { min: 0.001, max: 100000 });
+    numeric('stone_weight', 'stone weight', { min: 0, max: 100000 });
+    numeric('making_rate', 'making charge', { min: 0 });
+    numeric('gold_rate', 'gold rate', { min: 1 });
+    return line;
+  });
 }
 
-/** Price the given products at today's gold rate. This is exactly what gets saved on the order. */
+/** Price the given products at today's gold rate (unless a line carries its own rate). This is exactly what gets saved. */
 function buildQuote(rawItems, otherChargesInput) {
   const lines = normalizeLines(rawItems);
   const gstRate = settings.getRules().gst_rate;
   const today = clock.today();
-  const rows = lines.map((l) => {
+  const demand = new Map();
+  for (const l of lines) demand.set(l.product_id, (demand.get(l.product_id) || 0) + l.quantity);
+  const rows = lines.map((l, i) => {
     const product = products.getProduct(l.product_id);
     if (product.status !== 'active') throw conflict(`${product.name} is inactive and cannot be ordered`);
-    return { product, quantity: l.quantity, rate: goldRates.getRate(product.purity, today) };
+    const gross = round3(l.gross_weight ?? product.gross_weight);
+    const stone = round3(l.stone_weight ?? product.stone_weight);
+    if (stone > gross) throw bad(`Item ${i + 1}: stone weight cannot be more than the gross weight`);
+    const net = round3(gross - stone);
+    if (net <= 0) throw bad(`Item ${i + 1}: net gold weight must be above zero`);
+    const purity = l.purity ?? product.purity;
+    const rate = l.gold_rate ?? goldRates.getRate(purity, today);
+    const making_rate = l.making_rate ?? product.making_charge;
+    const name = l.name ?? product.name;
+    const description = l.description ?? null;
+    const edited = name !== product.name || purity !== product.purity || gross !== product.gross_weight || stone !== product.stone_weight
+      || making_rate !== product.making_charge || l.gold_rate != null || description != null;
+    return { product, quantity: l.quantity, name, description, purity, gross, stone, net, making_rate, rate, edited, demand: demand.get(l.product_id) };
   });
   const otherCharges = otherChargesInput == null || otherChargesInput === '' ? 0 : num(otherChargesInput, 'Other charges', { min: 0 });
   const priced = pricing.priceOrder({
-    items: rows.map((r) => ({ net_weight: round3(r.product.net_gold_weight * r.quantity), making_rate: r.product.making_charge, rate: r.rate })),
+    items: rows.map((r) => ({ net_weight: round3(r.net * r.quantity), making_rate: r.making_rate, rate: r.rate })),
     otherCharges,
     gstRate,
   });
@@ -78,11 +110,11 @@ function previewOrder(input) {
     order_date: quote.today,
     gst_rate: quote.gstRate,
     lines: quote.rows.map((r, i) => ({
-      product_id: r.product.id, name: r.product.name, sku: r.product.sku, purity: r.product.purity, image: r.product.image,
-      quantity: r.quantity, gross_weight: r.product.gross_weight, stone_weight: r.product.stone_weight,
-      net_weight_each: r.product.net_gold_weight, net_weight_total: round3(r.product.net_gold_weight * r.quantity),
-      making_rate: r.product.making_charge,
-      available: r.product.available_quantity, shortage: r.product.available_quantity < r.quantity,
+      product_id: r.product.id, name: r.name, description: r.description, sku: r.product.sku, purity: r.purity, image: r.product.image,
+      quantity: r.quantity, gross_weight: r.gross, stone_weight: r.stone,
+      net_weight_each: r.net, net_weight_total: round3(r.net * r.quantity),
+      making_rate: r.making_rate, edited: r.edited,
+      available: r.product.available_quantity, shortage: r.product.available_quantity < r.demand,
       ...p.lines[i],
     })),
     totals: { gold_value: p.gold_value, making_charge: p.making_charge, other_charges: p.other_charges, gst: p.gst, total: p.total },
@@ -110,9 +142,11 @@ function resolveCustomer(input) {
 }
 
 function checkAvailability(rows) {
-  for (const r of rows) {
-    const p = products.getProduct(r.product.id);
-    if (p.available_quantity < r.quantity) {
+  const demand = new Map();
+  for (const r of rows) demand.set(r.product.id, (demand.get(r.product.id) || 0) + r.quantity);
+  for (const [productId, quantity] of demand) {
+    const p = products.getProduct(productId);
+    if (p.available_quantity < quantity) {
       throw conflict(`${p.name}: only ${p.available_quantity} available (${p.reserved_quantity} reserved for other orders). Restock it in Inventory first.`,
         { product_id: p.id, available: p.available_quantity });
     }
@@ -122,11 +156,11 @@ function checkAvailability(rows) {
 function insertItem(orderId, row, line) {
   const p = row.product;
   q.run(
-    `INSERT INTO order_items (order_id, product_id, product_name, sku, barcode, metal_type, purity, quantity, gross_weight, stone_weight,
+    `INSERT INTO order_items (order_id, product_id, product_name, description, sku, barcode, metal_type, purity, quantity, gross_weight, stone_weight,
        making_rate, gold_rate, gold_value, making_charge, gst, total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    orderId, p.id, p.name, p.sku, p.barcode, p.metal_type, p.purity, row.quantity, p.gross_weight, p.stone_weight,
-    p.making_charge, line.gold_rate, line.gold_value, line.making_charge, line.gst, line.total);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    orderId, p.id, row.name, row.description, p.sku, p.barcode, p.metal_type, row.purity, row.quantity, row.gross, row.stone,
+    row.making_rate, line.gold_rate, line.gold_value, line.making_charge, line.gst, line.total);
 }
 
 /**

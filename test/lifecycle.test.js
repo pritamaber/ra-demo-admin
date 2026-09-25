@@ -202,6 +202,64 @@ test('walk-in bill: paid in full, delivered and billed in one step', () => {
   assert.equal(orders.listOrders({}).total, count);
 });
 
+test('the shopkeeper can edit an item for one order without touching the catalogue', () => {
+  const chain = product('Classic Gold Chain'); // 10 g, 22K, ₹850/g making
+  const before = products.getProduct(chain.id);
+  const edits = {
+    product_id: chain.id, name: 'Custom Rope Chain (heavier)', description: 'Extra 2 g, matte finish',
+    gross_weight: 12.5, stone_weight: 0.5, making_rate: 700, gold_rate: 14000, purity: '22K',
+  };
+  const preview = orders.previewOrder({ items: [edits] });
+  const l = preview.lines[0];
+  assert.equal(l.name, 'Custom Rope Chain (heavier)');
+  assert.equal(l.net_weight_each, 12, 'net = gross - stone');
+  assert.equal(l.gold_value, 168000);   // 12 g × ₹14,000
+  assert.equal(l.making_charge, 8400);  // 12 g × ₹700
+  assert.equal(l.gst, 5292);            // 3% of 176,400
+  assert.equal(l.edited, true);
+  assert.equal(preview.lines.length, 1);
+  assert.equal(orders.previewOrder({ items: [{ product_id: chain.id }] }).lines[0].edited, false, 'untouched line is not flagged');
+
+  // saved on the order item and carried onto the bill; the catalogue product is unchanged
+  const buyer = customers.findByPhone('9748123456');
+  const o = orders.createOrder({ customer_id: buyer.id, items: [edits], payment: { amount: 1000, payment_method: 'Cash' } });
+  const item = o.items[0];
+  assert.equal(item.product_name, 'Custom Rope Chain (heavier)');
+  assert.equal(item.description, 'Extra 2 g, matte finish');
+  assert.equal(item.gross_weight, 12.5);
+  assert.equal(item.net_gold_weight, 12);
+  assert.equal(o.order.total_amount, 181692);
+  assert.deepEqual(products.getProduct(chain.id).gross_weight, before.gross_weight);
+  assert.equal(products.getProduct(chain.id).name, before.name);
+  assert.equal(products.getProduct(chain.id).making_charge, before.making_charge);
+  orders.acceptOrder(o.order.id);
+  const done = orders.deliver(o.order.id, { payment: { amount: o.order.outstanding_amount, payment_method: 'UPI' } });
+  const billItem = bills.get(done.bill.id).bill.items[0];
+  assert.equal(billItem.name, 'Custom Rope Chain (heavier)');
+  assert.equal(billItem.description, 'Extra 2 g, matte finish');
+  assert.equal(billItem.net_gold_weight, 12);
+  assert.equal(billItem.gold_rate, 14000);
+
+  // sensible validation
+  assert.throws(() => orders.previewOrder({ items: [{ product_id: chain.id, gross_weight: 1, stone_weight: 2 }] }), /stone weight cannot be more/);
+  assert.throws(() => orders.previewOrder({ items: [{ product_id: chain.id, purity: '21K' }] }), /purity must be one of/);
+  assert.throws(() => orders.previewOrder({ items: [{ product_id: chain.id, gold_rate: 0 }] }), /gold rate/);
+});
+
+test('the same product can appear on two lines with different edits; stock is checked across both', () => {
+  const kada = product('Traditional Kada'); // 3 in stock, none reserved
+  const buyer = customers.findByPhone('9433012345');
+  const two = orders.previewOrder({ items: [{ product_id: kada.id, gross_weight: 25 }, { product_id: kada.id, gross_weight: 30 }] });
+  assert.equal(two.lines.length, 2, 'lines are not merged');
+  assert.notEqual(two.lines[0].gold_value, two.lines[1].gold_value);
+  assert.throws(() => orders.createOrder({ customer_id: buyer.id, items: [{ product_id: kada.id, quantity: 2 }, { product_id: kada.id, quantity: 2 }] }), /only 3 available/);
+  const o = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: kada.id, quantity: 1, gross_weight: 25 }, { product_id: kada.id, quantity: 2, gross_weight: 30 }] });
+  assert.equal(o.items.length, 2);
+  assert.equal(products.getProduct(kada.id).reserved_quantity, 3);
+  orders.cancelOrder(o.order.id, 'test');
+  assert.equal(products.getProduct(kada.id).reserved_quantity, 0);
+});
+
 test('restocking an out-of-stock product records history and clears the flag', () => {
   const churi = product('Designer Churi');
   assert.equal(churi.stock_status, 'OUT_OF_STOCK');
