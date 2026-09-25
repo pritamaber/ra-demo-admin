@@ -46,7 +46,7 @@ export async function customersPage({ el, isCurrent }) {
   let owing = false;
   let text = '';
   mount(el, html`
-    <div class="page-head">
+    <div class="page-head dash-head">
       <div><h1>Customers</h1><div class="sub">Search by mobile number to open a profile with orders, bills and balance.</div></div>
       <div class="page-actions"><button class="btn btn-primary" id="add-customer">+ Add customer</button></div>
     </div>
