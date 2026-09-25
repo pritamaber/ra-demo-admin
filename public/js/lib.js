@@ -137,7 +137,7 @@ export function openModal({ title, content, size = '', onOpen }) {
   document.addEventListener('keydown', onKey);
   onOpen?.(wrap, close);
   const first = $('input:not([type=hidden]):not([readonly]), select, textarea', wrap);
-  first?.focus();
+  if (matchMedia('(pointer: fine)').matches) first?.focus();
   return { el: wrap, close };
 }
 

@@ -1,4 +1,4 @@
-import { $, $$, api, html, mount, icon, inr, debounce, navigate, toast } from './lib.js';
+import { $, $$, api, html, raw, mount, icon, inr, debounce, navigate, toast } from './lib.js';
 import { dashboardPage } from './pages/dashboard.js';
 import { ordersListPage, orderNewPage, orderDetailPage, orderSlipPage } from './pages/orders.js';
 import { billingPage, billViewPage } from './pages/billing.js';
@@ -49,7 +49,7 @@ async function renderRoute() {
   const token = ++renderToken;
   const match = ROUTES.map(([re, page, title, nav]) => ({ m: path.match(re), page, title, nav })).find((r) => r.m);
   if (!match) { navigate('/dashboard'); return; }
-  $$('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.path === match.nav));
+  $$('#nav a, #bottom-nav a').forEach((a) => a.classList.toggle('active', a.dataset.path === match.nav));
   document.title = `${match.title} · RA Jewellers`;
   mount(view, html`<div class="card card-body"><div class="skeleton" style="width:40%"></div><div class="skeleton"></div><div class="skeleton" style="width:80%"></div></div>`);
   try {
@@ -66,6 +66,38 @@ async function renderRoute() {
 
 // ----------------------------------------------------------------- sidebar
 mount($('#nav'), html`${NAV.map(([ic, label, path]) => html`<a href="#${path}" data-path="${path}">${icon(ic)}<span>${label}</span></a>`)}`);
+
+// ------------------------------------------------------- responsive shell
+const bodyEl = document.body;
+const menuBtn = $('#menu-btn');
+const setDrawer = (open) => { bodyEl.classList.toggle('drawer-open', open); menuBtn.setAttribute('aria-expanded', String(open)); };
+menuBtn.addEventListener('click', () => setDrawer(!bodyEl.classList.contains('drawer-open')));
+$('#scrim').addEventListener('click', () => setDrawer(false));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDrawer(false); });
+window.addEventListener('hashchange', () => setDrawer(false));
+
+const svg = (d) => raw(`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`);
+const BOTTOM = [['dashboard', 'Home', '/dashboard'], ['orders', 'Orders', '/orders'], ['new', 'New', '/orders/new'], ['customers', 'Customers', '/customers']];
+mount($('#bottom-nav'), html`${BOTTOM.map(([ic, label, path]) => html`<a href="#${path}" data-path="${path}" class="${ic === 'new' ? 'bn-new' : ''}">${ic === 'new' ? svg('M12 5v14M5 12h14') : icon(ic, 22)}<span>${label}</span></a>`)}
+  <button type="button" id="bn-more">${svg('M5 12h.01M12 12h.01M19 12h.01')}<span>More</span></button>`);
+$('#bn-more').addEventListener('click', () => setDrawer(true));
+
+// Tables collapse into stacked cards on phones (CSS); label each cell from its column header.
+function labelCells(root) {
+  root.querySelectorAll('table.tbl').forEach((t) => {
+    const heads = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    if (!heads.length) return;
+    t.querySelectorAll('tbody tr').forEach((tr) => [...tr.children].forEach((td, i) => {
+      if (heads[i] && td.dataset.label !== heads[i]) td.dataset.label = heads[i];
+    }));
+  });
+}
+let labelQueued = false;
+new MutationObserver(() => {
+  if (labelQueued) return;
+  labelQueued = true;
+  requestAnimationFrame(() => { labelQueued = false; labelCells(document); });
+}).observe(document.body, { childList: true, subtree: true });
 
 // ------------------------------------------------------------- gold rate chips
 async function loadRateChips() {
