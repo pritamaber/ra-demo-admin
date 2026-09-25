@@ -1,3 +1,4 @@
+import { statementArticle, statementFromBill } from './statement.js';
 import {
   $, api, html, mount, inr, inr2, grams, perGram, fmtDate, roundOffText, empty, toast, debounce, icon,
 } from '../lib.js';
@@ -77,7 +78,8 @@ export async function billViewPage({ el, params, isCurrent }) {
           <div>Phone: ${b.customer.phone}</div>${b.customer.address ? html`<div>${b.customer.address}${b.customer.city ? ', ' + b.customer.city : ''}</div>` : ''}</div>
         <div><h5>Order details</h5>
           <div>${b.order_kind === 'SALE' ? 'Walk-in bill' : 'Order no.'}: <b>${b.order_number}</b></div><div>${b.order_kind === 'SALE' ? 'Sale date' : 'Order date'}: ${fmtDate(b.order_date)}</div>${b.order_kind === 'SALE' ? '' : html`<div>Delivery date: ${fmtDate(b.delivery_date)}</div>`}
-          <div>Gold rate: ${perGram(b.gold_rate)} on ${fmtDate(b.order_date, false)}</div></div>
+          ${b.gold ? html`<div>Gold: ${grams(b.gold.net_weight)} · average ${perGram(b.gold.average_rate)}</div>${b.order_kind === 'SALE' ? '' : html`<div>Booked at ${perGram(b.gold.booked_rate)} on ${fmtDate(b.order_date, false)}</div>`}`
+            : html`<div>Gold rate: ${perGram(b.gold_rate)} on ${fmtDate(b.order_date, false)}</div>`}</div>
       </section>
 
       <table class="inv-table">
@@ -92,8 +94,8 @@ export async function billViewPage({ el, params, isCurrent }) {
       <div class="inv-cols">
         <div class="inv-box">
           <h5>Payments</h5>
-          <table class="inv-table"><thead><tr><th>Date</th><th>Type</th><th>Method</th><th class="num">Amount</th></tr></thead>
-            <tbody>${b.payments.map((p) => html`<tr><td>${fmtDate(p.date)}</td><td>${p.kind}</td><td>${p.method}${p.reference ? html`<div class="inv-small" style="margin:1px 0 0">${p.reference}</div>` : ''}</td><td class="num">${inr2(p.amount)}</td></tr>`)}</tbody></table>
+          <table class="inv-table"><thead><tr><th>Date</th><th>Type</th><th>Method</th><th class="num">Amount</th><th class="num">Gold rate</th><th class="num">Gold bought</th></tr></thead>
+            <tbody>${b.payments.map((p) => html`<tr><td>${fmtDate(p.date)}</td><td>${p.kind}</td><td>${p.method}${p.reference ? html`<div class="inv-small" style="margin:1px 0 0">${p.reference}</div>` : ''}</td><td class="num">${inr2(p.amount)}</td><td class="num">${p.gold_rate ? perGram(p.gold_rate) : '—'}</td><td class="num">${p.gold_grams > 0 ? grams(p.gold_grams) : '—'}</td></tr>`)}</tbody></table>
           <div class="kv total"><span class="k">Total paid</span><span class="v">${inr2(b.total_paid)}</span></div>
           <div class="kv sub"><span class="k">Payment method${b.payment_methods.length > 1 ? 's' : ''}</span><span class="v">${b.payment_methods.join(', ')}</span></div>
           <div class="kv sub"><span class="k">Balance</span><span class="v">${fullyPaid ? 'Nil — paid in full' : inr2(t.total - b.total_paid)}</span></div>
@@ -101,7 +103,7 @@ export async function billViewPage({ el, params, isCurrent }) {
         <div class="inv-box">
           <h5>Amount</h5>
           <div class="kv"><span class="k">Gold value</span><span class="v">${inr2(t.gold_value)}</span></div>
-          <div class="kv"><span class="k">Making charges</span><span class="v">${inr2(t.making_charge)}</span></div>
+          <div class="kv"><span class="k">Making charges${t.making_quoted - t.making_charge > 0.005 ? ` (quoted ${inr2(t.making_quoted)})` : ''}</span><span class="v">${inr2(t.making_charge)}</span></div>
           <div class="kv"><span class="k">Other charges${t.other_charges_note ? ` (${t.other_charges_note})` : ''}</span><span class="v">${inr2(t.other_charges)}</span></div>
           <div class="kv"><span class="k">CGST @ ${t.gst_rate / 2}%</span><span class="v">${inr2(t.cgst)}</span></div>
           <div class="kv"><span class="k">SGST @ ${t.gst_rate / 2}%</span><span class="v">${inr2(t.sgst)}</span></div>
@@ -111,12 +113,13 @@ export async function billViewPage({ el, params, isCurrent }) {
         </div>
       </div>
 
-      <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${t.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. The gold rate is fixed on the order date.</p>
+      <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${t.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. Each payment bought gold at the rate of the day it was paid (see Payments).</p>
       <div class="inv-foot">
         <div class="inv-small" style="margin:0;max-width:430px">Goods once sold are subject to the shop's exchange policy. Please retain this bill and the hallmark certificate. This is a computer-generated final bill for order ${b.order_number}.</div>
         <div class="sign">Authorised signatory<br><span class="muted">${b.shop.name}</span></div>
       </div>
-    </article></div>`);
+    </article></div>
+    ${b.order_kind !== 'SALE' && b.gold ? html`<div class="invoice-wrap" style="margin-top:18px">${statementArticle(statementFromBill(rec), { pageBreak: true })}</div>` : ''}`);
 
   $('#print-bill', el).addEventListener('click', () => window.print());
 }

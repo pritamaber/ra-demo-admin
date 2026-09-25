@@ -62,9 +62,9 @@ function buildSnapshot(order, billNumber, billDate) {
     },
     payments: payments.map((p, i) => ({
       date: p.payment_date, method: p.payment_method, amount: p.amount, reference: p.reference_number, kind: kinds[i],
-      gold_rate: p.gold_rate, gold_grams: p.gold_fraction > 0 ? round3(p.gold_fraction * netWeight) : 0,
+      gold_rate: p.gold_rate, gold_grams: p.gold_fraction > 0 ? round3(p.gold_fraction * netWeight) : 0, gold_amount: p.gold_amount,
     })),
-    gold: { net_weight: netWeight, value: order.subtotal, average_rate: netWeight > 0 ? round2(order.subtotal / netWeight) : 0, booked_rate: order.order_gold_rate, booked_total: order.booked_total || order.total_amount },
+    gold: { net_weight: netWeight, value: order.subtotal, average_rate: netWeight > 0 ? round2(order.subtotal / netWeight) : 0, booked_rate: order.order_gold_rate, booked_total: order.booked_total || order.total_amount, booked_gold_value: round2(items.reduce((sum, it) => sum + it.gold_value, 0)) },
     total_paid: round2(payments.reduce((sum, p) => sum + p.amount, 0)),
     payment_methods: [...new Set(payments.map((p) => p.payment_method))],
   };

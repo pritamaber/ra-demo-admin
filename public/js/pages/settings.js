@@ -25,13 +25,13 @@ export async function settingsPage({ el, isCurrent }) {
     </div>
     <form id="settings-form" class="stack">
       <div class="card"><div class="card-head"><h2>How prices are worked out</h2></div><div class="card-body">
-        <div class="notice" style="margin-bottom:16px">One simple formula for every order and bill. The gold rate is fixed on the day the order is placed — later rate changes never affect a placed order.</div>
+        <div class="notice" style="margin-bottom:16px">Gold is settled gram by gram: every payment buys gold at that day's rate, and gold that is not paid for yet is valued at the day's rate until it is.</div>
         <div class="stack" style="margin-bottom:16px">
-          <div class="kv"><span class="k">Gold value</span><span class="v">net weight (g) × gold rate of the day (₹/g)</span></div>
-          <div class="kv"><span class="k">Making charge</span><span class="v">net weight (g) × the product's making rate (₹/g)</span></div>
-          <div class="kv"><span class="k">GST</span><span class="v">GST % × (gold value + making charge)</span></div>
-          <div class="kv"><span class="k">Other charges</span><span class="v">optional flat amount per order (no GST)</span></div>
-          <div class="kv"><span class="k">Round off</span><span class="v">the total is rounded to the nearest rupee; the difference is shown as its own line</span></div>
+          <div class="kv"><span class="k">Gold value</span><span class="v">net weight × gold rate — each payment buys grams at its own day's rate (₹ ÷ rate = grams)</span></div>
+          <div class="kv"><span class="k">Making charge</span><span class="v">net weight × making rate (₹/g) — can be changed when a payment is recorded</span></div>
+          <div class="kv"><span class="k">GST</span><span class="v">GST % × (final gold value + making charge)</span></div>
+          <div class="kv"><span class="k">Other charges</span><span class="v">optional flat amount (no GST)</span></div>
+          <div class="kv"><span class="k">Round off</span><span class="v">the total is rounded to the nearest rupee; the difference is its own line</span></div>
           <div class="kv total"><span class="k">Total</span><span class="v">gold + making + GST + other charges ± round off</span></div>
         </div>
         <div class="form-grid">${group('pricing').map((d) => field(d, values[d.key]))}</div>

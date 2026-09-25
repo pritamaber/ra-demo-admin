@@ -3,6 +3,7 @@ import {
   moveBadge, roundOffText, empty, openModal, onSubmit, toast, navigate, refresh, debounce, initials, slugify, icon, STATUS_FLOW, statusLabel,
 } from '../lib.js';
 import { openProductDetail } from './catalog.js';
+import { statementArticle, statementFromOrder } from './statement.js';
 const METHODS = ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other'];
 const methodOptions = (selected = 'UPI') => html`${METHODS.map((m) => html`<option ${m === selected ? 'selected' : ''}>${m}</option>`)}`;
 const walkInTag = (o) => (o.kind === 'SALE' ? html`<span class="badge purple">Walk-in bill</span>` : '');
@@ -188,7 +189,8 @@ function newTransactionPage(mode) {
               <div class="form-grid">
                 ${isSale ? '' : html`<div class="field full"><label for="f-adv">Amount paid now (₹) — optional</label>
                   <div class="input-group"><span>₹</span><input id="f-adv" type="number" min="0" step="1" placeholder="0"></div>
-                  <div class="hint">Any amount secures the pieces. <a href="#" id="pay-full">Pay the full amount</a></div></div>`}
+                  <div class="hint">Any amount secures the pieces. <a href="#" id="pay-full">Pay the full amount</a></div>
+                  <div class="hint" id="adv-gold" style="color:var(--maroon);font-weight:600"></div></div>`}
                 <div class="field"><label for="f-method">Method</label><select id="f-method">${methodOptions('UPI')}</select></div>
                 <details class="item-details more-opts field" ${onPhone ? '' : 'open'}>
                   <summary>Reference no. <span class="muted small">— optional</span></summary>
@@ -432,18 +434,29 @@ function newTransactionPage(mode) {
         ${t.other_charges ? html`<div class="kv"><span class="k">Other charges</span><span class="v">${inr(t.other_charges)}</span></div>` : ''}
         ${t.round_off ? html`<div class="kv"><span class="k">Round off</span><span class="v">${roundOffText(t.round_off)}</span></div>` : ''}
         <div class="kv total"><span class="k">Total</span><span class="v">${inr(t.total)}</span></div>
-        <div class="muted small" style="margin-top:8px">Total = gold + making + GST on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. ${isSale ? '' : 'The price is locked when the order is placed.'}</div>
+        <div class="muted small" style="margin-top:8px">Total = gold + making + GST on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. ${isSale ? '' : 'Every payment buys gold at that day\'s rate; gold not yet paid for follows the day\'s rate until it is.'}</div>
         ${p.lines.some((l) => l.shortage) ? html`<div class="notice warn" style="margin-top:10px">Not enough stock for one of the items. Restock it in Inventory first.</div>` : ''}`);
       $$('[data-view-product]', figures).forEach((b) => b.addEventListener('click', () => openProductDetail(Number(b.dataset.viewProduct))));
       updateBalance();
     }
     const total = () => st.preview?.totals.total;
+    /** What a payment of this size buys today: grams of gold at today's rate (gold is paid first). */
+    const goldHint = (adv) => {
+      const tot = st.preview?.totals;
+      if (!tot || !(adv > 0)) return '';
+      const weight = st.preview.lines.reduce((sum, l) => sum + l.net_weight_total, 0);
+      const rate = weight > 0 ? tot.gold_value / weight : 0;
+      if (adv <= tot.gold_value + 0.005) return `${(adv / rate).toFixed(3)} g of gold at today's ${inr(Math.round(rate * 100) / 100)}/g`;
+      return `all ${weight.toFixed(3)} g of gold, plus ${inr(adv - tot.gold_value)} towards making charge & GST`;
+    };
     function updateBalance() {
       const t = total();
       const adv = isSale ? t : Number($('#f-adv', el).value) || 0;
       $('#balance', el).textContent = t == null ? '—' : inr(isSale ? t : Math.max(t - adv, 0));
       $('#bar-total', el).textContent = t == null ? '—' : inr(t);
       $('#bar-sub', el).textContent = t == null ? '' : isSale ? 'Paid in full' : adv > 0 ? `Paying ${inr(adv)} now · balance ${inr(Math.max(t - adv, 0))}` : 'Nothing paid now';
+      const gh = $('#adv-gold', el);
+      if (gh) gh.textContent = adv > 0 && t != null ? `= ${goldHint(adv)}` : '';
     }
     if (!isSale) {
       $('#f-adv', el).addEventListener('input', updateBalance);
@@ -480,7 +493,8 @@ function newTransactionPage(mode) {
 
       const payBox = html`<div class="inv-box">
         <h5>Payment${isSale ? '' : ' (planned)'}</h5>
-        ${paidNow > 0 ? html`<div class="kv"><span class="k">${isSale ? 'Paid in full' : 'Paid now'} (${method})</span><span class="v">${inr2(paidNow)}</span></div>` : html`<div class="muted small">Nothing paid yet.</div>`}
+        ${paidNow > 0 ? html`<div class="kv"><span class="k">${isSale ? 'Paid in full' : 'Paid now'} (${method})</span><span class="v">${inr2(paidNow)}</span></div>
+          ${isSale ? '' : html`<div class="kv sub"><span class="k">= ${goldHint(paidNow)}</span><span class="v"></span></div>`}` : html`<div class="muted small">Nothing paid yet.</div>`}
         <div class="kv total" style="margin-top:8px"><span class="k">Balance due</span><span class="v">${inr2(Math.max(t.total - paidNow, 0))}</span></div>
       </div>`;
 
@@ -511,7 +525,7 @@ function newTransactionPage(mode) {
             <div class="inv-total"><span>Total amount</span><span>${inr2(t.total)}</span></div>
           </div>
         </div>
-        <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${p.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. ${isSale ? '' : 'The gold rate is fixed on the order date.'}</p>
+        <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${p.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. ${isSale ? '' : 'Each payment buys gold at the rate of the day it is paid; unpaid gold follows the day\'s rate.'}</p>
       </article>`;
 
       const slipView = () => html`<article class="invoice">
@@ -629,7 +643,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
   const id = params[0];
   const data = await api.get(`/api/orders/${id}`);
   if (!isCurrent()) return;
-  const { order: o, customer: c, items, payments, price, events, stock_movements: moves, bill, actions } = data;
+  const { order: o, customer: c, items, payments, price, settlement: sm, events, stock_movements: moves, bill, actions } = data;
   const has = (a) => actions.includes(a);
   const flowIdx = STATUS_FLOW.indexOf(o.status);
   const statusActions = ['accept', 'mark_ready', 'deliver', 'unmark_ready', 'cancel'].filter(has);
@@ -664,7 +678,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
       <div class="card card-body" style="margin-top:12px"><div class="flow">${STATUS_FLOW.map((k, i) => html`<div class="flow-step ${i < flowIdx || o.status === 'DELIVERED' ? 'done' : ''} ${i === flowIdx && o.status !== 'DELIVERED' ? 'now' : ''}" data-label="Step ${i + 1} of ${STATUS_FLOW.length} · ${statusLabel(k)}">${statusLabel(k)}</div>`)}</div></div>`}
 
     <div class="kpis order-kpis" style="margin-top:18px">
-      <div class="kpi"><div class="kpi-label">Order total</div><div class="kpi-value">${inr(o.total_amount)}</div><div class="kpi-note">price locked at ${perGram(o.order_gold_rate)} on ${fmtDate(o.order_date, false)}</div></div>
+      <div class="kpi"><div class="kpi-label">Order total</div><div class="kpi-value">${inr(o.total_amount)}</div><div class="kpi-note">${sm.total_change ? `booked at ${inr(sm.booked.total)}` : `at ${perGram(sm.booked.gold_rate)} on ${fmtDate(o.order_date, false)}`}</div></div>
       <div class="kpi"><div class="kpi-label">Paid so far</div><div class="kpi-value" style="color:var(--green)">${inr(o.paid_amount)}</div><div class="kpi-note">${payments.length} payment${payments.length === 1 ? '' : 's'}</div></div>
       <div class="kpi ${o.outstanding_amount > 0 ? 'hero' : ''}"><div class="kpi-label">Balance due</div><div class="kpi-value">${inr(o.outstanding_amount)}</div>
         <div class="kpi-note">${o.status === 'CANCELLED' ? 'cancelled' : o.outstanding_amount > 0 ? paymentBadge(o.payment_status) : 'Paid in full ✓'}</div></div>
@@ -684,27 +698,38 @@ export async function orderDetailPage({ el, params, isCurrent }) {
     </div>
 
     <div class="card" style="margin-top:18px">
-      <div class="card-head"><h2>Price</h2><span class="muted small">Locked on the order date — later gold-rate changes do not affect it</span></div>
+      <div class="card-head"><h2>Gold &amp; price</h2><span class="muted small">Gold you have paid for stays at the rate of the day you paid · unpaid gold follows today's rate</span></div>
       <div class="card-body">
-        ${price.lines.map((l) => html`<div style="margin-bottom:12px">
-          <div class="cell-main">${l.name}${l.quantity > 1 ? ` × ${l.quantity}` : ''}</div>
-          ${kv(`Gold: ${grams(l.net_weight)} × ${perGram(l.gold_rate)}`, inr(l.gold_value), 'sub')}
-          ${kv(`Making: ${grams(l.net_weight)} × ${perGram(l.making_rate)}`, inr(l.making_charge), 'sub')}
-          ${kv(`GST @ ${price.gst_rate}%`, inr(l.gst), 'sub')}</div>`)}
-        ${price.other_charges ? kv(`Other charges${price.other_charges_note ? ` (${price.other_charges_note})` : ''}`, inr(price.other_charges)) : ''}
-        ${price.round_off ? kv('Round off', roundOffText(price.round_off)) : ''}
-        ${kv('Order total', inr(price.total), 'total')}
+        ${kv(`Gold booked: ${grams(sm.net_weight)} at ${perGram(sm.booked.gold_rate)} (${fmtDate(o.order_date, false)})`, inr(sm.booked.gold_value), 'sub')}
+        ${sm.gold_purchases.map((g) => kv(`Paid ${fmtDate(g.date, false)}: ${inr(g.amount)} at ${perGram(g.rate)}`, `${grams(g.grams)} bought`, 'credit'))}
+        ${sm.gold_remaining_grams > 0.0005
+          ? kv(`Still to pay: ${grams(sm.gold_remaining_grams)} at ${o.status === 'DELIVERED' ? 'the day' : "today's"} ${perGram(sm.gold_rate_today)}`, inr(sm.remaining.gold_value))
+          : kv('All the gold is paid for', grams(sm.net_weight), 'credit')}
+        ${kv('Gold value', inr(sm.gold_value), 'sub')}
+        ${kv(`Making charge${sm.booked.making_charge - sm.making_charge > 0.005 ? ` (quoted ${inr(sm.booked.making_charge)})` : ''}`, inr(sm.making_charge))}
+        ${kv(`GST @ ${price.gst_rate}% on gold + making`, inr(sm.gst))}
+        ${sm.other_charges ? kv(`Other charges${price.other_charges_note ? ` (${price.other_charges_note})` : ''}`, inr(sm.other_charges)) : ''}
+        ${sm.round_off ? kv('Round off', roundOffText(sm.round_off)) : ''}
+        ${kv(sm.is_final ? 'Final amount' : 'Order total now', inr(sm.total), 'total')}
+        ${sm.total_change ? html`<div class="kv sub"><span class="k">Booked at ${inr(sm.booked.total)} — ${sm.total_change > 0 ? 'up' : 'down'} ${inr(Math.abs(sm.total_change))} as the gold rate moved</span><span class="v"></span></div>` : ''}
         ${kv('Paid', '− ' + inr(o.paid_amount), 'credit')}
         ${o.status === 'CANCELLED' ? '' : kv('Balance due', inr(o.outstanding_amount), `due ${o.outstanding_amount <= 0.005 ? 'zero' : ''}`)}
+        ${o.outstanding_amount > 0.005 && o.status !== 'CANCELLED' ? html`<div class="settle-simple remaining">Still owed: ${[
+          sm.remaining.gold_grams > 0.0005 ? `${grams(sm.remaining.gold_grams)} gold (${inr(sm.remaining.gold_value)})` : '',
+          sm.remaining.making_charge > 0.005 ? `${inr(sm.remaining.making_charge)} making` : '',
+          sm.remaining.other_charges > 0.005 ? `${inr(sm.remaining.other_charges)} other` : '',
+          sm.remaining.gst > 0.005 ? `${inr(sm.remaining.gst)} GST` : '',
+        ].filter(Boolean).join(' + ')}${Math.abs(sm.remaining.round_off) > 0.005 ? ` ${sm.remaining.round_off > 0 ? '+' : '−'} ${inr2(Math.abs(sm.remaining.round_off))} round off` : ''} = <b>${inr(o.outstanding_amount)}</b></div>` : ''}
       </div>
     </div>
 
     <div class="card" style="margin-top:18px">
-      <div class="card-head"><h2>Payments</h2><span class="muted small">Records are never edited or removed.</span></div>
-      ${payments.length ? html`<div class="table-wrap"><table class="tbl"><thead><tr><th>Payment</th><th>Date</th><th>Type</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th>Notes</th></tr></thead>
+      <div class="card-head"><h2>Payments</h2><div class="row"><span class="muted small">Records are never edited or removed.</span>${payments.length ? html`<a class="btn btn-sm" href="#/orders/${o.id}/statement">${icon('print')} Payment statement</a>` : ''}</div></div>
+      ${payments.length ? html`<div class="table-wrap"><table class="tbl"><thead><tr><th>Payment</th><th>Date</th><th>Type</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th class="num">Gold rate</th><th class="num">Gold bought</th><th>Notes</th></tr></thead>
         <tbody>${payments.map((p) => html`<tr><td class="mono">PAY-${String(p.id).padStart(4, '0')}</td><td class="nowrap">${fmtDate(p.payment_date)}</td><td>${p.kind}</td><td>${p.payment_method}</td>
-          <td class="mono">${p.reference_number || '—'}</td><td class="num bold">${inr(p.amount)}</td><td>${p.notes || ''}</td></tr>`)}</tbody>
-        <tfoot><tr><td colspan="5">Total paid</td><td class="num">${inr(o.paid_amount)}</td><td></td></tr></tfoot></table></div>` : empty('No payments recorded yet')}
+          <td class="mono">${p.reference_number || '—'}</td><td class="num bold">${inr(p.amount)}</td>
+          <td class="num">${p.gold_rate ? perGram(p.gold_rate) : '—'}</td><td class="num">${p.gold_grams > 0 ? grams(p.gold_grams) : '—'}</td><td>${p.notes || ''}</td></tr>`)}</tbody>
+        <tfoot><tr><td colspan="5">Total paid</td><td class="num">${inr(o.paid_amount)}</td><td></td><td class="num">${grams(sm.gold_paid_grams)}</td><td></td></tr></tfoot></table></div>` : empty('No payments recorded yet')}
     </div>
 
     <div class="grid cols-2" style="margin-top:18px">
@@ -751,29 +776,112 @@ async function post(url, body, okMessage) {
   try { await api.post(url, body); toast(okMessage); refresh(); } catch (e) { toast(e.message, 'error'); }
 }
 
+// ---- The breakup shown when taking a payment: what is still owed, item by item — and the two amounts the
+//      shopkeeper may change when they were negotiated (e.g. the customer bargains the making charge 7,500 → 7,000).
+function breakupMarkup(o, st) {
+  return html`<div class="breakup">
+      <div class="bk-title">Still to pay <span class="muted small" data-bk="paid"></span></div>
+      <div class="bk-row"><span>Gold <small data-bk="gold_sub"></small></span><b data-bk="gold"></b></div>
+      <div class="bk-row"><span>Making charge</span><b data-bk="making"></b></div>
+      <div class="bk-row"><span>GST <small>@ ${o.gst_rate}% on gold + making</small></span><b data-bk="gst"></b></div>
+      <div class="bk-row" data-bk-row="other"><span>Other charges</span><b data-bk="other"></b></div>
+      <div class="bk-row" data-bk-row="round"><span>Round off</span><b data-bk="round"></b></div>
+      <div class="bk-row total"><span>Balance due</span><b data-bk="balance"></b></div>
+    </div>
+    <div class="bk-adjust">
+      <div class="bk-adjust-title">Agreed with the customer <span class="muted small">— change an amount if it was negotiated</span></div>
+      <div class="form-grid">
+        <div class="field"><label>Making charge (₹)</label><input data-adj="making_charge" type="number" min="0" step="0.01" value="${st.making_charge}"></div>
+        <div class="field"><label>Other charges (₹)</label><input data-adj="other_charges" type="number" min="0" step="0.01" value="${st.other_charges}"></div>
+        <div class="field full" data-bk-row="reason" hidden><label>Reason for the change (optional)</label><input data-adj="reason" placeholder="e.g. Customer bargained"></div>
+      </div>
+      <div class="hint" data-bk="quoted"></div>
+    </div>`;
+}
+
+/** Fills the breakup from a settlement and keeps it live as the shopkeeper edits the agreed amounts. */
+function breakupController(root, order, initial, onUpdate) {
+  mount(root, breakupMarkup(order, initial));
+  let st = initial;
+  let seq = 0;
+  const set = (k, v) => { const e = $(`[data-bk=${k}]`, root); if (e) e.textContent = v; };
+  const show = (k, on) => { const e = $(`[data-bk-row=${k}]`, root); if (e) e.hidden = !on; };
+  const field = (k) => $(`[data-adj=${k}]`, root);
+  function fill(next) {
+    st = next;
+    const r = st.remaining;
+    set('paid', st.gold_paid_grams > 0 ? `· ${grams(st.gold_paid_grams)} of gold already paid (${inr(st.gold_paid_amount)})` : '');
+    set('gold_sub', r.gold_grams > 0.0005 ? `${grams(r.gold_grams)} × ${perGram(st.gold_rate_today)} today` : '— all paid for');
+    set('gold', inr(r.gold_value));
+    set('making', inr(r.making_charge));
+    set('gst', inr(r.gst));
+    set('other', inr(r.other_charges));
+    show('other', st.other_charges > 0 || r.other_charges > 0);
+    set('round', roundOffText(r.round_off));
+    show('round', Math.abs(r.round_off) > 0.005);
+    set('balance', inr(st.outstanding));
+    set('quoted', st.booked.making_charge - st.making_charge > 0.005 || st.making_charge - st.booked.making_charge > 0.005 ? `Making charge as quoted: ${inr(st.booked.making_charge)}` : '');
+    onUpdate?.(st);
+  }
+  const adjust = () => {
+    const out = {};
+    for (const k of ['making_charge', 'other_charges']) if (field(k).value !== '') out[k] = Number(field(k).value);
+    const reason = field('reason').value.trim();
+    if (reason) out.reason = reason;
+    return out;
+  };
+  async function refresh() {
+    const mine = ++seq;
+    try {
+      const res = await api.post(`/api/orders/${order.id}/settlement`, { adjust: adjust() });
+      if (mine !== seq) return;
+      show('reason', res.changed.length > 0);
+      fill(res.settlement);
+    } catch (err) { if (mine === seq) set('balance', err.message); }
+  }
+  const soon = debounce(refresh, 300);
+  $$('[data-adj=making_charge], [data-adj=other_charges]', root).forEach((i) => i.addEventListener('input', soon));
+  fill(initial);
+  return { adjust, get st() { return st; } };
+}
+
+/** "≈ 3.333 g of gold at today's ₹15,000/g" — what a payment of this size buys. */
+function goldBought(amount, st) {
+  if (!(amount > 0) || !(st.remaining.gold_grams > 0.0005)) return amount > 0 ? 'goes towards making charge & GST' : '';
+  if (amount <= st.remaining.gold_value + 0.005) return `${(amount / st.gold_rate_today).toFixed(3)} g of gold at today's ${inr(st.gold_rate_today)}/g`;
+  return `all the remaining ${grams(st.remaining.gold_grams)} of gold, and ${inr(amount - st.remaining.gold_value)} towards making charge & GST`;
+}
+
 function openPaymentModal(data) {
-  const { order: o } = data;
-  const due = o.outstanding_amount;
+  const { order: o, settlement: s0 } = data;
   openModal({
     title: `Record payment · ${o.order_number}`,
-    content: html`<form class="form-grid">
-      <div class="notice full" style="grid-column:1/-1">Balance due: <b>${inr(due)}</b> of ${inr(o.total_amount)}.</div>
-      <div class="field full"><label for="p-amount">Amount received (₹)</label>
-        <div class="input-group"><span>₹</span><input id="p-amount" name="amount" type="number" min="1" step="0.01" max="${due}" value="" required></div>
-        <div class="hint"><a href="#" id="p-full">Pay the full balance (${inr(due)})</a></div></div>
-      <div class="field"><label for="p-method">Payment method</label><select id="p-method" name="payment_method">${methodOptions('UPI')}</select></div>
-      <div class="field"><label for="p-date">Payment date</label><input id="p-date" name="payment_date" type="date" value="${todayIso()}" min="${o.order_date}" max="${todayIso()}"></div>
-      <div class="field full"><label for="p-ref">Reference number</label><input id="p-ref" name="reference_number" placeholder="UPI ref, card auth code, cheque no."></div>
-      <div class="field full"><label for="p-notes">Notes</label><input id="p-notes" name="notes"></div>
-      <div class="form-error full" style="grid-column:1/-1"></div>
-      <div class="modal-actions full" style="grid-column:1/-1"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Save payment</button></div>
+    size: 'wide',
+    content: html`<form>
+      <div id="pm-breakup"></div>
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field full"><label for="p-amount">Amount received (₹)</label>
+          <div class="input-group"><span>₹</span><input id="p-amount" name="amount" type="number" min="1" step="0.01" required></div>
+          <div class="hint"><a href="#" id="p-full">Pay the full balance</a> · <span id="p-gold"></span></div></div>
+        <div class="field"><label for="p-method">Payment method</label><select id="p-method" name="payment_method">${methodOptions('UPI')}</select></div>
+        <div class="field"><label for="p-date">Payment date</label><input id="p-date" name="payment_date" type="date" value="${todayIso()}" min="${o.order_date}" max="${todayIso()}"></div>
+        <div class="field full"><label for="p-ref">Reference number</label><input id="p-ref" name="reference_number" placeholder="UPI ref, card auth code, cheque no."></div>
+        <div class="field full"><label for="p-notes">Notes</label><input id="p-notes" name="notes"></div>
+        <div class="form-error full" style="grid-column:1/-1"></div>
+        <div class="modal-actions full" style="grid-column:1/-1"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-primary" type="submit">Save payment</button></div>
+      </div>
     </form>`,
     onOpen: (m, close) => {
-      $('#p-full', m).onclick = (e) => { e.preventDefault(); $('#p-amount', m).value = due; };
+      const amount = $('#p-amount', m);
+      let current = s0; // the latest settlement (it changes as the agreed amounts are edited)
+      const showGold = () => { $('#p-gold', m).textContent = goldBought(Number(amount.value), current); };
+      const ctl = breakupController($('#pm-breakup', m), o, s0, (st) => { current = st; amount.max = st.outstanding; showGold(); });
+      amount.addEventListener('input', showGold);
+      $('#p-full', m).onclick = (e) => { e.preventDefault(); amount.value = current.outstanding; showGold(); };
       onSubmit($('form', m), async (v) => {
-        await api.post(`/api/orders/${o.id}/payments`, v);
+        const res = await api.post(`/api/orders/${o.id}/payments`, { ...v, adjust: ctl.adjust() });
         close();
-        toast(`Payment of ${inr(Number(v.amount))} recorded`);
+        toast(`Payment of ${inr(Number(v.amount))} recorded — ${goldBought(Number(v.amount), ctl.st)}`);
         refresh();
       });
     },
@@ -781,35 +889,43 @@ function openPaymentModal(data) {
 }
 
 function openDeliverModal(data) {
-  const { order: o } = data;
-  const due = o.outstanding_amount;
+  const { order: o, settlement: s0 } = data;
   openModal({
     title: `Deliver · ${o.order_number}`,
+    size: 'wide',
     content: html`<form>
-      <div class="card" style="box-shadow:none"><div class="card-body">
-        ${kv('Order total', inr(o.total_amount))}
-        ${kv('Already paid', '− ' + inr(o.paid_amount), 'credit')}
-        ${kv('Balance to collect now', inr(due), `due ${due <= 0.005 ? 'zero' : ''}`)}
-      </div></div>
-      ${due > 0.005 ? html`<div class="form-grid" style="margin-top:14px">
-        <div class="field"><label for="d-amount">Amount received now (₹)</label><div class="input-group"><span>₹</span><input id="d-amount" name="amount" type="number" step="0.01" min="0" max="${due}" value="${due}"></div>
-          <div class="hint">The piece is handed over only when the balance is paid in full.</div></div>
+      <div id="dv-breakup"></div>
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field"><label for="d-amount">Amount received now (₹)</label><div class="input-group"><span>₹</span><input id="d-amount" name="amount" type="number" step="0.01" min="0" value="${s0.outstanding}"></div>
+          <div class="hint"><span id="d-gold"></span> The piece is handed over only when the balance is paid in full.</div></div>
         <div class="field"><label for="d-method">Payment method</label><select id="d-method" name="payment_method">${methodOptions('UPI')}</select></div>
         <div class="field full"><label for="d-ref">Reference number</label><input id="d-ref" name="reference_number"></div>
-      </div>` : html`<p class="muted" style="margin-top:12px">Nothing more to collect.</p>`}
-      <p class="muted small" style="margin-top:12px">On confirmation the order becomes <b>Delivered</b>, stock is reduced and the final bill is generated automatically.</p>
+      </div>
+      <p class="muted small" style="margin-top:12px">On confirmation the order becomes <b>Delivered</b>, stock is reduced, the final gold value is locked and the final bill is generated automatically.</p>
       <div class="form-error"></div>
-      <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-gold" type="submit">${due > 0.005 ? 'Take payment & deliver' : 'Confirm delivery'}</button></div>
+      <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-gold" type="submit" id="dv-submit">Take payment &amp; deliver</button></div>
     </form>`,
-    onOpen: (m, close) => onSubmit($('form', m), async (v) => {
-      const amount = Number(v.amount) || 0;
-      const body = {};
-      if (amount > 0) body.payment = { amount, payment_method: v.payment_method, reference_number: v.reference_number };
-      const res = await api.post(`/api/orders/${o.id}/deliver`, body);
-      close();
-      toast(`${o.order_number} delivered — final bill ${res.bill.bill_number} generated`);
-      refresh();
-    }),
+    onOpen: (m, close) => {
+      const amount = $('#d-amount', m);
+      let touched = false;
+      const sync = (st) => {
+        if (!touched) amount.value = st.outstanding;
+        amount.max = st.outstanding;
+        $('#d-gold', m).textContent = goldBought(Number(amount.value), st);
+        $('#dv-submit', m).textContent = st.outstanding > 0.005 || Number(amount.value) > 0 ? 'Take payment & deliver' : 'Confirm delivery';
+      };
+      const ctl = breakupController($('#dv-breakup', m), o, s0, sync);
+      amount.addEventListener('input', () => { touched = true; sync(ctl.st); });
+      onSubmit($('form', m), async (v) => {
+        const paid = Number(v.amount) || 0;
+        const body = { adjust: ctl.adjust() };
+        if (paid > 0) body.payment = { amount: paid, payment_method: v.payment_method, reference_number: v.reference_number };
+        const res = await api.post(`/api/orders/${o.id}/deliver`, body);
+        close();
+        toast(`${o.order_number} delivered — final bill ${res.bill.bill_number} generated`);
+        refresh();
+      });
+    },
   });
 }
 
@@ -884,8 +1000,8 @@ export async function orderSlipPage({ el, params, isCurrent }) {
       <div class="inv-cols">
         <div class="inv-box">
           <h5>Payments</h5>
-          ${payments.length ? html`<table class="inv-table"><thead><tr><th>Date</th><th>Type</th><th>Method</th><th class="num">Amount</th></tr></thead>
-            <tbody>${payments.map((p) => html`<tr><td>${fmtDate(p.payment_date)}</td><td>${p.kind}</td><td>${p.payment_method}</td><td class="num">${inr2(p.amount)}</td></tr>`)}</tbody></table>`
+          ${payments.length ? html`<table class="inv-table"><thead><tr><th>Date</th><th>Type</th><th>Method</th><th class="num">Amount</th><th class="num">Gold rate</th><th class="num">Gold bought</th></tr></thead>
+            <tbody>${payments.map((p) => html`<tr><td>${fmtDate(p.payment_date)}</td><td>${p.kind}</td><td>${p.payment_method}</td><td class="num">${inr2(p.amount)}</td><td class="num">${p.gold_rate ? perGram(p.gold_rate) : '—'}</td><td class="num">${p.gold_grams > 0 ? grams(p.gold_grams) : '—'}</td></tr>`)}</tbody></table>`
             : html`<div class="muted">No payments yet.</div>`}
           <div class="kv total" style="margin-top:8px"><span class="k">Total paid</span><span class="v">${inr2(o.paid_amount)}</span></div>
           <div class="kv sub"><span class="k">Balance due</span><span class="v">${inr2(o.outstanding_amount)}</span></div>
@@ -905,7 +1021,8 @@ export async function orderSlipPage({ el, params, isCurrent }) {
         <div class="inv-small" style="margin:0;max-width:430px">Internal order slip for workshop and delivery use. Deliberately excludes customer name, address and phone number.</div>
         <div class="sign">Prepared by<br><span class="muted">RA Jewellers</span></div>
       </div>
-    </article></div>`);
+    </article></div>
+    ${payments.length && o.kind !== 'SALE' ? html`<div class="invoice-wrap" style="margin-top:18px">${statementArticle(statementFromOrder(data), { pageBreak: true })}</div>` : ''}`);
 
   $('#print-slip', el).addEventListener('click', () => window.print());
 }

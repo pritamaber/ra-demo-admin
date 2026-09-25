@@ -127,10 +127,10 @@ export async function dashboardPage({ el, isCurrent }) {
       <div class="card-head" style="background:var(--gold-soft)"><h2>Try the full lifecycle in two minutes</h2><span class="muted small">Rahul Das · 22K Classic Gold Chain · 10 g</span></div>
       <div class="card-body">
         <ol style="margin:0;padding-left:20px;line-height:1.9">
-          <li>Open <a href="#/orders/${rahul.id}">${rahul.order_number}</a>. Rahul paid ${inr(rahul.paid_amount)} of ${inr(rahul.total_amount)} to secure the chain — the price was fixed at ${perGram(rahul.order_gold_rate)} on the order date, whatever the gold rate does later.</li>
-          <li>Click <b>Mark Ready</b> when the piece is prepared. Use <b>Change Delivery Date</b> if the plan moves.</li>
-          <li>Click <b>Deliver</b>, take the balance of ${inr(rahul.outstanding_amount)} and confirm. Stock drops by one, the order is delivered and the <b>final bill is generated automatically</b>.</li>
-          <li>Check the bill in Rahul's <a href="#/customers/${rahul.customer_id}">customer profile</a> and watch Outstanding fall here. For a walk-in customer, use <a href="#/billing/new">Billing → New Bill</a>.</li>
+          <li>Open <a href="#/orders/${rahul.id}">${rahul.order_number}</a>. Rahul paid ${inr(rahul.paid_amount)} of ${inr(rahul.total_amount)}: that money bought gold at the rate of the day he paid. See <b>Gold &amp; price</b> for the grams paid and the grams still owed.</li>
+          <li>Open <a href="#/gold-rate">Gold Rate</a> and enter a new 22K rate — the gold Rahul has not paid for yet is re-valued at once; the gold he has paid for stays locked.</li>
+          <li>Click <b>Record Payment</b>: see the full breakup (gold left, making, GST) and change the making charge if the customer bargains, then take the payment.</li>
+          <li>When the balance is zero, <b>Update status → Deliver</b>. Stock drops, the gold value is locked and the <b>final bill is generated automatically</b> — see it in Rahul's <a href="#/customers/${rahul.customer_id}">profile</a>.</li>
         </ol>
       </div>
     </div>` : ''}

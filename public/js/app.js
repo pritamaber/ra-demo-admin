@@ -2,6 +2,7 @@ import { $, $$, api, html, raw, openModal, mount, icon, inr, debounce, navigate,
 import { dashboardPage } from './pages/dashboard.js';
 import { ordersListPage, orderNewPage, saleNewPage, orderDetailPage, orderSlipPage } from './pages/orders.js';
 import { billingPage, billViewPage } from './pages/billing.js';
+import { orderStatementPage } from './pages/statement.js';
 import { customersPage, customerProfilePage, openCustomerForm } from './pages/customers.js';
 import { catalogPage, openProductForm } from './pages/catalog.js';
 import { inventoryPage } from './pages/inventory.js';
@@ -25,6 +26,7 @@ const ROUTES = [
   [/^\/orders\/new$/, orderNewPage, 'New Order', '/orders'],
   [/^\/orders\/(\d+)$/, orderDetailPage, 'Order', '/orders'],
   [/^\/orders\/(\d+)\/slip$/, orderSlipPage, 'Order Slip', '/orders'],
+  [/^\/orders\/(\d+)\/statement$/, orderStatementPage, 'Payment Statement', '/orders'],
   [/^\/billing$/, billingPage, 'Billing', '/billing'],
   [/^\/billing\/new$/, saleNewPage, 'New Bill', '/billing'],
   [/^\/bills\/(\d+)$/, billViewPage, 'Final Bill', '/billing'],

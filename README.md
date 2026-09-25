@@ -43,24 +43,35 @@ Order Placed → Accepted → Ready for Delivery → Delivered  (final bill crea
 
 **Walk-in bill** (Billing → *New Bill*) — the customer is in the shop: pick the customer and items, take the full payment, done. The sale is placed, paid, delivered and billed in one step.
 
-### The price formula
+### Gold-first settlement — how the price and the payments work
 
-One formula for every order and bill, **fixed on the day the order is placed** — later gold-rate changes never touch a placed order.
+**Booking.** The order is quoted at the gold rate of the order date:
 
 ```
-gold value = net weight (g) × gold rate of that day (₹/g)
+gold value = net weight (g) × gold rate (₹/g)
 making     = net weight (g) × the product's making rate (₹/g)
 GST        = GST% × (gold value + making)                  → 3% by default
-total      = gold value + making + GST + other charges, rounded to the nearest rupee
-             (other charges: optional, no GST; the rounding shows as its own "Round off" line)
+total      = gold + making + GST + other charges, rounded to the nearest rupee (shown as a "Round off" line)
 ```
 
-Amounts are kept to the paisa (GST included); only the grand total is rounded, and the difference is printed as a **Round off** line (for example +₹0.04). On the order form the shopkeeper can **edit each item for that order** — name, description, purity, gross/stone weight (net is calculated), making rate and gold rate — without touching the catalogue product. The only pricing setting is the GST rate (Settings); a new rate applies to orders placed from then on.
-Example: 10 g at ₹14,720/g with ₹850/g making → ₹1,47,200 + ₹8,500 + ₹4,671 GST = **₹1,60,371**.
-Example with round-off: 15.6 g at ₹14,720/g with ₹750/g making → ₹2,29,632 + ₹11,700 + ₹7,239.96 GST = ₹2,48,571.96 → round off +₹0.04 → **₹2,48,572**.
+Amounts are kept to the paisa; only the grand total is rounded. Example: 15.6 g at ₹14,720/g, making ₹750/g → ₹2,29,632 + ₹11,700 + ₹7,239.96 GST = ₹2,48,571.96 → round off +₹0.04 → **₹2,48,572**.
 
-- Payments are stored as the **rupee amount received** (with method, date and reference) and are **append-only**: the database rejects edits and deletes.
-- Gold rates are **dated and never overwritten** — an order is priced with the rate effective on its order date.
+**Payments buy gold.** Every payment is converted to grams at *that day's* gold rate: `grams = amount ÷ rate`.
+Gold is paid first; once all the gold is paid for, the rest goes towards making charge, other charges and GST.
+
+- ₹1,50,000 paid on booking day at ₹14,720/g = **10.190 g** → **5.410 g** of gold still owed.
+- The gold still owed is valued at the rate of the day it gets paid. At ₹15,000/g it is ₹81,146.74, so the total becomes ₹2,50,132 and the balance ₹1,00,132.
+- A later part payment buys gold at *its* day's rate (₹50,000 at ₹15,000/g = 3.333 g), and so on until every gram is paid for. From then on the total no longer moves.
+- Making charge is quoted per gram; GST is recalculated on the final gold value plus making charge.
+- Open orders are re-valued whenever the gold rate changes (and when they are opened); gold already paid for and delivered orders never move.
+
+**Editing what was agreed.** In **Record Payment** and **Deliver** the shopkeeper sees the full breakup — gold still to pay (grams and ₹), making charge, GST, other charges, round off, balance — and can change the **making charge** and **other charges** (e.g. the customer bargains ₹7,500 → ₹7,000). The balance recalculates live; the change is written to the order's activity log and the bill shows the quoted vs agreed making charge.
+On the order form the shopkeeper can also edit each item for that order — name, description, purity, gross/stone weight (net is calculated), making rate and gold rate — without touching the catalogue product.
+
+**Documents.** Every order has a **Payment statement** (own page, printable) showing how each payment was applied — date, rate, grams bought, ₹ to gold vs making/GST, gold still owed — and it is included as the second printed page of the order slip and of the final bill.
+
+- Payments are stored as the **rupee amount received**, with method, date, the gold rate that day and the grams bought, and are **append-only**: the database rejects edits and deletes.
+- Gold rates are **dated and never overwritten** — the rate for a date is the latest entry effective on or before it. On the order date itself an order keeps the rate it was booked at (negotiated rates included).
 - A bill is created only from a delivered, fully paid order and cannot be edited afterwards.
 
 **Stock** is tracked as *on hand*, *reserved* (held for open orders), *available* (= on hand − reserved) and *sold*. Placing an order reserves stock; cancelling releases it; delivery consumes it.
@@ -70,8 +81,9 @@ Every change is written to the stock-movement ledger with the previous quantity,
 
 The dashboard has this as a guided card. The scenario is Rahul Das — 22K Classic Gold Chain, 10 g, ordered at ₹14,720/g with a ₹50,000 UPI payment.
 
-1. **Orders → ORD-…-0007 (Rahul Das)**: total ₹1,60,371, paid ₹50,000, balance ₹1,10,371 — the price stays as booked whatever the gold rate does.
-2. **Mark Ready**, then **Deliver** → take the balance. The order becomes *Delivered*, stock drops by one and the **final bill is generated automatically**.
+1. **Orders → ORD-…-0007 (Rahul Das)**: total ₹1,60,371, paid ₹50,000 (= 3.397 g of gold at ₹14,720/g), balance ₹1,10,371. Open **Gold & price** to see the grams paid and the grams still owed.
+   Then set a new 22K rate in **Gold Rate** — the gold he has not paid for yet is re-valued at once.
+2. **Record Payment** shows the full breakup and lets you change the making charge; then **Update status → Mark ready → Deliver** → take the balance. The order becomes *Delivered*, stock drops by one and the **final bill is generated automatically**.
 3. Check **Customers → Rahul Das → Final bills**, the **Dashboard** (outstanding has fallen by ₹1,10,371) and **Inventory → Stock movements** (`Reserve` then `Sale`).
 4. **Billing → New Bill** for a walk-in customer, **+ New Order** to book one (new customers are added on the spot), **Inventory → Out of stock → Restock**.
 
