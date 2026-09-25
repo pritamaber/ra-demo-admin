@@ -14,7 +14,7 @@ const goldRates = require('./services/goldrates');
 const products = require('./services/products');
 const customers = require('./services/customers');
 const orders = require('./services/orders');
-const bills = require('./services/bills');
+const sales = require('./services/sales');
 
 const CATEGORIES = {
   Ring: ['Plain Band', 'Stone Studded'],
@@ -153,69 +153,73 @@ function seed() {
         }).id;
       }
       const item = (name, quantity = 1) => ({ product_id: prod[name], quantity });
-      const due = (id) => orders.getOrder(id).settlement.delivery.outstanding;
+      const due = (id) => orders.getOrder(id).order.outstanding_amount;
+      const place = (customer, items, delivery, extra = {}) => {
+        const o = orders.createOrder({ customer_id: cust[customer], items, expected_delivery_date: delivery, ...extra }).order;
+        return o;
+      };
 
-      // ---- d25: Kavita Jain — pendant + studs (will be billed)
+      // ---- d25: Kavita Jain — pendant + studs (will be delivered and billed)
       at(25, '11:20');
-      const kavita = orders.createOrder({
-        customer_id: cust['Kavita Jain'], items: [item('22K Floral Pendant'), item('22K Stud Earrings')],
-        expected_delivery_date: d(20), notes: 'Diwali gift set',
-        advance: { amount: 30000, payment_method: 'UPI', reference_number: 'UPI 4021 5839 2716' },
-      }).order;
+      const kavita = place('Kavita Jain', [item('22K Floral Pendant'), item('22K Stud Earrings')], d(20), {
+        notes: 'Diwali gift set',
+        payment: { amount: 30000, payment_method: 'UPI', reference_number: 'UPI 4021 5839 2716' },
+      });
+      at(25, '11:40');
+      orders.acceptOrder(kavita.id);
 
       // ---- d22: restock
       at(22, '15:10');
       products.adjustStock(prod['22K Stud Earrings'], { type: 'RESTOCK', quantity: 4, reason: 'Restocked from karigar — batch 14' });
 
-      // ---- d20: Kavita collects and pays the balance; bill issued
+      // ---- d20: Kavita collects and pays the balance; the final bill is created automatically
       at(20, '17:05');
       orders.deliver(kavita.id, { payment: { amount: due(kavita.id), payment_method: 'Card', reference_number: 'Card ****4417 / Auth 884120' } });
-      bills.generate(kavita.id);
 
-      // ---- d18: Rohan Ghosh — men's ring (will be billed)
+      // ---- d18: Rohan Ghosh — men's ring
       at(18, '12:15');
-      const rohan = orders.createOrder({
-        customer_id: cust['Rohan Ghosh'], items: [item("22K Men's Gold Ring")], expected_delivery_date: d(12),
-        advance: { amount: 60000, payment_method: 'Cash' },
-      }).order;
+      const rohan = place('Rohan Ghosh', [item("22K Men's Gold Ring")], d(12), { payment: { amount: 60000, payment_method: 'Cash' } });
+      at(18, '12:30');
+      orders.acceptOrder(rohan.id);
 
       // ---- d15: stock adjustment outside any order
       at(15, '12:40');
       products.adjustStock(prod['22K Long Mangalsutra'], { type: 'ADJUSTMENT', quantity: -1, reason: 'Sent to karigar for remodelling' });
 
-      // ---- d12: Rohan collects; bill issued
+      // ---- d12: Rohan collects
       at(12, '16:30');
       orders.deliver(rohan.id, { payment: { amount: due(rohan.id), payment_method: 'UPI', reference_number: 'UPI 4188 2093 7714' } });
-      bills.generate(rohan.id);
 
-      // ---- d10: Sneha Banerjee — jhumka; delivery date already passed today, so she is overdue
+      // ---- d10: Sneha Banerjee — jhumka; the delivery date has passed, so she is overdue
       at(10, '13:00');
-      const sneha = orders.createOrder({
-        customer_id: cust['Sneha Banerjee'], items: [item('22K Jhumka Earrings')], expected_delivery_date: d(3),
+      const sneha = place('Sneha Banerjee', [item('22K Jhumka Earrings')], d(3), {
         notes: 'Wants the pair polished before delivery.',
-        advance: { amount: 30000, payment_method: 'Cash' },
-      }).order;
+        payment: { amount: 30000, payment_method: 'Cash' },
+      });
+      at(10, '13:10');
+      orders.acceptOrder(sneha.id);
 
-      // ---- d9: Sourav Dutta — designer churi pair (delivered, bill still to be generated)
+      // ---- d9: Sourav Dutta — designer churi pair
       at(9, '14:25');
-      const sourav = orders.createOrder({
-        customer_id: cust['Sourav Dutta'], items: [item('22K Designer Churi Pair')], expected_delivery_date: d(5),
-        advance: { amount: 100000, payment_method: 'Bank Transfer', reference_number: 'NEFT SBIN52609170023' },
-      }).order;
+      const sourav = place('Sourav Dutta', [item('22K Designer Churi Pair')], d(5), {
+        payment: { amount: 100000, payment_method: 'Bank Transfer', reference_number: 'NEFT SBIN52609170023' },
+      });
+      at(9, '14:40');
+      orders.acceptOrder(sourav.id);
 
       // ---- d7 / d6: Arjun Sen's kada order is placed, then cancelled (stock is reserved, then released)
       at(7, '18:00');
-      const kada = orders.createOrder({ customer_id: cust['Arjun Sen'], items: [item('22K Traditional Kada')], expected_delivery_date: d(-7) }).order;
+      const kada = place('Arjun Sen', [item('22K Traditional Kada')], d(-7));
       at(6, '11:45');
       orders.cancelOrder(kada.id, 'Customer changed the design');
 
       // ---- d6: Ananya Mukherjee — mangalsutra + nose pin
       at(6, '15:40');
-      const ananya = orders.createOrder({
-        customer_id: cust['Ananya Mukherjee'], items: [item('22K Traditional Mangalsutra'), item('22K Gold Nose Pin')],
-        expected_delivery_date: d(-2),
-        advance: { amount: 40000, payment_method: 'Card', reference_number: 'Card ****2290 / Auth 501877' },
-      }).order;
+      const ananya = place('Ananya Mukherjee', [item('22K Traditional Mangalsutra'), item('22K Gold Nose Pin')], d(-2), {
+        payment: { amount: 40000, payment_method: 'Card', reference_number: 'Card ****2290 / Auth 501877' },
+      });
+      at(6, '15:55');
+      orders.acceptOrder(ananya.id);
 
       // ---- d5: Sourav pays in instalments and takes delivery
       at(5, '10:30');
@@ -227,34 +231,40 @@ function seed() {
       at(4, '12:20');
       orders.addPayment(sneha.id, { amount: 20000, payment_method: 'UPI', reference_number: 'UPI 4301 1187 5502' });
 
-      // ---- d3: Rahul Das — the reference scenario: 22K Classic Gold Chain, 10 g at ₹14,720/g, ₹50,000 advance
+      // ---- d3: Rahul Das — the reference scenario: 22K Classic Gold Chain, 10 g at ₹14,720/g, ₹50,000 paid to secure it
       at(3, '11:35');
-      orders.createOrder({
-        customer_id: cust['Rahul Das'], items: [item('22K Classic Gold Chain')], expected_delivery_date: d(0),
+      const rahul = place('Rahul Das', [item('22K Classic Gold Chain')], d(0), {
         notes: 'Anniversary gift. Will collect on the delivery date.',
-        advance: { amount: 50000, payment_method: 'UPI', reference_number: 'UPI 4327 9901 2264' },
+        payment: { amount: 50000, payment_method: 'UPI', reference_number: 'UPI 4327 9901 2264' },
       });
+      at(3, '11:50');
+      orders.acceptOrder(rahul.id);
 
       // ---- d2: Ananya's second payment; Meera Agarwal books a Rani Haar with a token advance
       at(2, '13:10');
       orders.addPayment(ananya.id, { amount: 35000, payment_method: 'UPI', reference_number: 'UPI 4355 6120 8873' });
       at(2, '16:00');
-      orders.createOrder({
-        customer_id: cust['Meera Agarwal'], items: [item('22K Rani Haar Necklace')], expected_delivery_date: d(-14),
+      const meera = place('Meera Agarwal', [item('22K Rani Haar Necklace')], d(-14), {
         notes: 'Wedding gift — final design to be confirmed.',
-        advance: { amount: 25000, payment_method: 'Cash' },
+        payment: { amount: 25000, payment_method: 'Cash' },
       });
+      at(2, '16:10');
+      orders.acceptOrder(meera.id);
 
-      // ---- d1: Ananya's piece is ready; Arjun Sen books a bracelet without an advance
+      // ---- d1: Ananya's piece is ready; a walk-in bill; Arjun Sen books a bracelet (not yet accepted, nothing paid)
       at(1, '11:00');
       orders.setReady(ananya.id, true);
+      at(1, '14:20');
+      sales.createSale({
+        customer_id: cust['Rohan Ghosh'], items: [item('22K Gold Nose Pin')],
+        payment: { payment_method: 'Cash' },
+      });
       at(1, '17:30');
-      orders.createOrder({ customer_id: cust['Arjun Sen'], items: [item("22K Men's Bracelet")], expected_delivery_date: d(-9) });
+      place('Arjun Sen', [item("22K Men's Bracelet")], d(-9));
     });
   } finally {
     clock.reset();
   }
-  orders.recalcOpenOrders(); // bring open orders up to today's rate
 }
 
 /** Wipes everything and reloads the demo data. */

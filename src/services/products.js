@@ -13,7 +13,7 @@ const METALS = ['Gold']; // gold rates are the only rate master in the demo
 const PRODUCT_SELECT = `
   SELECT p.*, c.name AS category_name, sc.name AS subcategory_name,
     (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN orders o ON o.id = oi.order_id
-      WHERE oi.product_id = p.id AND o.status IN ('DELIVERED','BILLED')) AS sold_quantity
+      WHERE oi.product_id = p.id AND o.status = 'DELIVERED') AS sold_quantity
   FROM products p
   JOIN categories c ON c.id = p.category_id
   LEFT JOIN categories sc ON sc.id = p.subcategory_id`;
@@ -302,7 +302,7 @@ function summary() {
        COALESCE(SUM(available_quantity), 0) AS units_available,
        COALESCE(SUM(CASE WHEN available_quantity <= 0 THEN 1 ELSE 0 END), 0) AS out_of_stock,
        COALESCE(SUM(CASE WHEN available_quantity > 0 AND available_quantity <= ? THEN 1 ELSE 0 END), 0) AS low_stock,
-       (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.status IN ('DELIVERED','BILLED')) AS units_sold
+       (SELECT COALESCE(SUM(oi.quantity), 0) FROM order_items oi JOIN orders o ON o.id = oi.order_id WHERE o.status = 'DELIVERED') AS units_sold
      FROM products WHERE status = 'active'`, threshold);
 }
 

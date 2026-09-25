@@ -36,10 +36,27 @@ function tx(fn) {
   }
 }
 
+// Bump when the orders/billing tables change shape in a way that cannot be altered in place.
+const SCHEMA_VERSION = 2;
+
+/** Version 2 replaced the multi-rule order/settlement model with the simple lifecycle. An older database
+ *  cannot be converted in place, so it is copied aside (never lost) and the demo data is loaded afresh. */
+function upgradeOldDatabase() {
+  const version = db.prepare('PRAGMA user_version').get().user_version;
+  const hasOrders = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'orders'").get();
+  if (!hasOrders || version >= SCHEMA_VERSION) return;
+  if (DB_PATH !== ':memory:') {
+    const backup = `${DB_PATH}-backup-pre-v${SCHEMA_VERSION}-${Date.now()}`;
+    fs.copyFileSync(DB_PATH, backup);
+    console.log(`Database upgraded to the simplified order model. Your previous data was saved to ${backup}`);
+  }
+  dropAll();
+}
+
 function migrate() {
+  upgradeOldDatabase();
   db.exec(SCHEMA);
-  const orderCols = db.prepare("PRAGMA table_info(orders)").all().map((c) => c.name);
-  if (!orderCols.includes('credit_due_date')) db.exec('ALTER TABLE orders ADD COLUMN credit_due_date TEXT');
+  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   const customerCols = db.prepare("PRAGMA table_info(customers)").all().map((c) => c.name);
   if (!customerCols.includes('is_premium')) db.exec('ALTER TABLE customers ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0');
   const productCols = db.prepare("PRAGMA table_info(products)").all().map((c) => c.name);

@@ -2,9 +2,9 @@
 const { q, tx } = require('../db');
 const { bad, notFound, conflict, clock, str, pad, normalizePhone, isIsoDate, round2 } = require('../util');
 
-const OPEN_STATUSES = "('CONFIRMED','ADVANCE_RECEIVED','PARTIALLY_PAID','READY_FOR_DELIVERY','FULLY_PAID')";
-// Orders that count toward a customer's purchases / balance (drafts and cancelled orders do not).
-const LIVE = "o.status NOT IN ('DRAFT','CANCELLED')";
+const OPEN_STATUSES = "('PLACED','ACCEPTED','READY')";
+// Orders that count toward a customer's purchases / balance (cancelled orders do not).
+const LIVE = "o.status != 'CANCELLED'";
 
 const SUMMARY_SQL = `
   SELECT c.*,
@@ -58,7 +58,7 @@ function getSummary(id) {
 function getProfile(id) {
   const customer = getSummary(id);
   const orders = q.all(
-    `SELECT o.id, o.order_number, o.order_date, o.expected_delivery_date, o.actual_delivery_date, o.status, o.is_ready,
+    `SELECT o.id, o.order_number, o.order_date, o.expected_delivery_date, o.actual_delivery_date, o.status, o.kind,
        o.total_amount, o.paid_amount, o.outstanding_amount,
        (SELECT group_concat(oi.product_name || CASE WHEN oi.quantity > 1 THEN ' ×' || oi.quantity ELSE '' END, ', ') FROM order_items oi WHERE oi.order_id = o.id) AS products,
        (SELECT ROUND(SUM(oi.net_gold_weight * oi.quantity), 3) FROM order_items oi WHERE oi.order_id = o.id) AS gold_weight,

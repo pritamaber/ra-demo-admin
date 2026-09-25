@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS products (
   stone_weight      REAL NOT NULL DEFAULT 0 CHECK (stone_weight >= 0),
   -- Derived, never entered by hand: net gold = gross - stone
   net_gold_weight   REAL GENERATED ALWAYS AS (round(gross_weight - stone_weight, 3)) VIRTUAL,
-  making_charge     REAL NOT NULL DEFAULT 0 CHECK (making_charge >= 0),  -- interpreted per pricing_settings.making_charge_method
+  making_charge     REAL NOT NULL DEFAULT 0 CHECK (making_charge >= 0),  -- rupees per gram of net gold
   stock_quantity    INTEGER NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),     -- physically in the shop (includes reserved)
   reserved_quantity INTEGER NOT NULL DEFAULT 0 CHECK (reserved_quantity >= 0),  -- held for open orders
   available_quantity INTEGER GENERATED ALWAYS AS (stock_quantity - reserved_quantity) VIRTUAL,
@@ -85,35 +85,28 @@ CREATE TABLE IF NOT EXISTS pricing_settings (
   updated_at TEXT NOT NULL
 );
 
+-- One simple price rule, locked on the order date:
+--   gold = net weight x gold rate of that day; making = net weight x making rate; gst = gst% x (gold + making);
+--   total = gold + making + gst + other charges. Later gold-rate changes never touch an existing order.
 CREATE TABLE IF NOT EXISTS orders (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   order_number           TEXT NOT NULL UNIQUE,
   customer_id            INTEGER NOT NULL REFERENCES customers(id),
-  status                 TEXT NOT NULL CHECK (status IN
-    ('DRAFT','CONFIRMED','ADVANCE_RECEIVED','PARTIALLY_PAID','READY_FOR_DELIVERY','FULLY_PAID','DELIVERED','BILLED','CANCELLED')),
-  is_ready               INTEGER NOT NULL DEFAULT 0,   -- shop has marked the piece ready for hand-over
+  kind                   TEXT NOT NULL DEFAULT 'ORDER' CHECK (kind IN ('ORDER','SALE')),  -- SALE = walk-in bill, settled on the spot
+  status                 TEXT NOT NULL CHECK (status IN ('PLACED','ACCEPTED','READY','DELIVERED','CANCELLED')),
   order_date             TEXT NOT NULL,
   expected_delivery_date TEXT,
   actual_delivery_date   TEXT,
-  credit_due_date        TEXT,     -- set when delivered with money still owed ("delivered on credit")
   order_gold_rate        REAL,     -- rate locked when the order was placed (first item's purity)
-  applied_gold_rate      REAL,     -- rate the current totals are based on (moves with the market until delivery)
-  delivery_gold_rate     REAL,     -- rate frozen at delivery
-  -- Current applicable amounts. Before delivery they follow the pricing rules (may be re-priced);
-  -- once delivered they are frozen. `estimated_total` is the original quote and never changes.
   subtotal               REAL NOT NULL DEFAULT 0,      -- gold value
   making_charge          REAL NOT NULL DEFAULT 0,
   gst                    REAL NOT NULL DEFAULT 0,
+  gst_rate               REAL NOT NULL DEFAULT 3,
   other_charges          REAL NOT NULL DEFAULT 0,
   other_charges_note     TEXT,
-  round_off              REAL NOT NULL DEFAULT 0,
   total_amount           REAL NOT NULL DEFAULT 0,
-  estimated_total        REAL NOT NULL DEFAULT 0,
   paid_amount            REAL NOT NULL DEFAULT 0,      -- actual money received
-  credit_applied         REAL NOT NULL DEFAULT 0,      -- value of payments after applying the advance-treatment rule
   outstanding_amount     REAL NOT NULL DEFAULT 0,
-  estimate_json          TEXT,                         -- quote + rules at order time
-  pricing_snapshot       TEXT,                         -- rules + rates frozen at delivery
   notes                  TEXT,
   cancel_reason          TEXT,
   cancelled_at           TEXT,
@@ -138,20 +131,12 @@ CREATE TABLE IF NOT EXISTS order_items (
   gross_weight          REAL NOT NULL,                 -- per piece
   stone_weight          REAL NOT NULL,                 -- per piece
   net_gold_weight       REAL GENERATED ALWAYS AS (round(gross_weight - stone_weight, 3)) VIRTUAL,
-  making_method         TEXT NOT NULL,
-  making_rate           REAL NOT NULL,
-  -- Original order (quoted at the order-date rate)
-  gold_rate             REAL NOT NULL,
+  making_rate           REAL NOT NULL,                 -- rupees per gram of net gold
+  gold_rate             REAL NOT NULL,                 -- rupees per gram on the order date
   gold_value            REAL NOT NULL,
   making_charge         REAL NOT NULL,
   gst                   REAL NOT NULL,
-  total                 REAL NOT NULL,
-  -- Final figures, filled in at delivery
-  settled_gold_rate     REAL,
-  settled_gold_value    REAL,
-  settled_making_charge REAL,
-  settled_gst           REAL,
-  settled_total         REAL
+  total                 REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items (order_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id);
@@ -159,12 +144,9 @@ CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id);
 CREATE TABLE IF NOT EXISTS payments (
   id                   INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id             INTEGER NOT NULL REFERENCES orders(id),
-  amount               REAL NOT NULL CHECK (amount > 0),   -- authoritative financial value
+  amount               REAL NOT NULL CHECK (amount > 0),
   payment_method       TEXT NOT NULL CHECK (payment_method IN ('Cash','UPI','Card','Bank Transfer','Other')),
   payment_date         TEXT NOT NULL,
-  gold_rate_at_payment REAL NOT NULL,
-  gold_purity          TEXT NOT NULL,
-  gold_equivalent      REAL NOT NULL,                      -- informational: amount / gold_rate_at_payment (full precision)
   reference_number     TEXT,
   notes                TEXT,
   created_at           TEXT NOT NULL
@@ -181,7 +163,7 @@ BEGIN SELECT RAISE(ABORT, 'Payment records cannot be deleted'); END;
 CREATE TABLE IF NOT EXISTS bills (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   bill_number  TEXT NOT NULL UNIQUE,
-  order_id     INTEGER NOT NULL UNIQUE REFERENCES orders(id),   -- a bill only ever exists for an order
+  order_id     INTEGER NOT NULL UNIQUE REFERENCES orders(id),   -- a bill is created automatically when an order is delivered
   customer_id  INTEGER NOT NULL REFERENCES customers(id),
   bill_date    TEXT NOT NULL,
   total_amount REAL NOT NULL,

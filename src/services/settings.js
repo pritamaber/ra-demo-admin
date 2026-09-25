@@ -2,89 +2,18 @@
 const { q, tx } = require('../db');
 const { bad, clock } = require('../util');
 
-const opt = (value, label, hint) => ({ value, label, hint });
-
 /**
  * Every configurable rule lives here: its default, its allowed values and the text the UI shows.
  * Adding a new rule = adding one entry here and reading it in pricing.js.
  */
 const DEFINITIONS = [
-  // ---- Pricing rules (frozen onto an order when it is delivered) ----
-  {
-    key: 'gold_rate_settlement', group: 'pricing', type: 'select', default: 'delivery_date_rate',
-    label: 'Gold value at settlement',
-    description: 'Which gold rate is used to value the gold when the customer settles the order.',
-    options: [
-      opt('delivery_date_rate', 'Recalculate at delivery-date rate', 'Gold value follows the market until the piece is delivered.'),
-      opt('order_date_rate', 'Lock at order-date rate', 'Gold value is fixed on the day the order is placed.'),
-    ],
-  },
-  {
-    key: 'advance_treatment', group: 'pricing', type: 'select', default: 'monetary_credit',
-    label: 'Treatment of advance payments',
-    description: 'How money received before delivery is credited against the final amount.',
-    options: [
-      opt('monetary_credit', 'Monetary credit', 'Every rupee paid is a rupee of credit, whatever the gold rate does.'),
-      opt('gold_equivalent_credit', 'Gold-equivalent credit', 'Each payment is converted to grams at its own gold rate, then valued at the settlement rate.'),
-    ],
-  },
-  {
-    key: 'making_charge_method', group: 'pricing', type: 'select', default: 'per_gram',
-    label: 'Making charge method',
-    description: 'How the product\'s making-charge figure is interpreted for new orders.',
-    options: [
-      opt('per_gram', 'Rupees per gram of net gold', 'e.g. ₹850/g × net weight'),
-      opt('fixed_per_piece', 'Fixed rupees per piece', 'e.g. ₹8,500 per piece'),
-      opt('percent_of_gold', 'Percent of gold value', 'e.g. 8% of gold value'),
-    ],
-  },
-  {
-    key: 'making_charge_basis', group: 'pricing', type: 'select', default: 'fixed_at_order',
-    label: 'Making charge at delivery',
-    description: 'Whether the making charge quoted on the order date can change at delivery.',
-    options: [
-      opt('fixed_at_order', 'Fixed from the order date', 'The quoted making charge never changes.'),
-      opt('recalculate_at_delivery', 'Recalculate at delivery', 'Re-computed from the making rate and the settlement gold value.'),
-    ],
-  },
+  // ---- Pricing: the only number in the price formula that is not read from the product or the gold rate ----
   {
     key: 'gst_rate', group: 'pricing', type: 'number', default: 3, min: 0, max: 28, step: 0.1, suffix: '%',
     label: 'GST rate',
-    description: 'Charged on the GST basis below (3% is the standard rate on gold jewellery).',
+    description: 'Charged on gold value + making charge (3% is the standard rate on gold jewellery).',
   },
-  {
-    key: 'gst_basis', group: 'pricing', type: 'select', default: 'gold_and_making',
-    label: 'GST calculation basis',
-    description: 'The amount GST is calculated on.',
-    options: [
-      opt('gold_only', 'Gold value only'),
-      opt('gold_and_making', 'Gold value + making charge'),
-      opt('gold_making_other', 'Gold + making + other charges'),
-    ],
-  },
-  {
-    key: 'default_other_charges', group: 'pricing', type: 'number', default: 0, min: 0, step: 1, prefix: '₹',
-    label: 'Default other charges',
-    description: 'Pre-filled on every new order (hallmarking, packaging…). Can be changed per order.',
-  },
-  {
-    key: 'component_rounding', group: 'pricing', type: 'select', default: 'rupee',
-    label: 'Rounding of each amount',
-    description: 'Applied to gold value, making charge and GST individually.',
-    options: [opt('rupee', 'Nearest rupee'), opt('paise', 'Keep paise (2 decimals)')],
-  },
-  {
-    key: 'total_rounding', group: 'pricing', type: 'select', default: 'none',
-    label: 'Round-off on the total',
-    description: 'Optional round-off applied to the grand total (shown as a separate line).',
-    options: [opt('none', 'No round-off'), opt('nearest_10', 'Nearest ₹10'), opt('nearest_100', 'Nearest ₹100')],
-  },
-  // ---- Business rules (read live, never frozen) ----
-  {
-    key: 'min_advance_percent', group: 'business', type: 'number', default: 10, min: 0, max: 100, step: 1, suffix: '%',
-    label: 'Required advance',
-    description: 'Below this share of the estimate an order shows "Advance Received"; at or above it, "Partially Paid".',
-  },
+  // ---- Business rules ----
   {
     key: 'low_stock_threshold', group: 'business', type: 'number', default: 2, min: 0, step: 1, suffix: 'pcs',
     label: 'Low-stock threshold',
@@ -132,22 +61,10 @@ function getAll() {
   return out;
 }
 
-/** Only the rules that decide how an amount is calculated (these get frozen onto delivered orders). */
+/** The pricing rules (currently just the GST rate). */
 function getRules() {
   const all = getAll();
   return Object.fromEntries(PRICING_KEYS.map((k) => [k, all[k]]));
-}
-
-/** Human-readable list of the rules, for the UI and the bill. */
-function describe(rules) {
-  return PRICING_KEYS.map((key) => {
-    const def = BY_KEY[key];
-    const value = rules[key];
-    let text;
-    if (def.type === 'select') text = def.options.find((o) => o.value === value)?.label ?? String(value);
-    else text = `${def.prefix ?? ''}${value}${def.suffix ?? ''}`;
-    return { key, label: def.label, value, text };
-  });
 }
 
 function definitionsForUi() {
@@ -178,4 +95,4 @@ function update(patch) {
   });
 }
 
-module.exports = { DEFINITIONS, definitionsForUi, getAll, getRules, describe, update, seedDefaults, PRICING_KEYS };
+module.exports = { DEFINITIONS, definitionsForUi, getAll, getRules, update, seedDefaults, PRICING_KEYS };

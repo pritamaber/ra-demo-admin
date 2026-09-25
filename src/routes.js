@@ -7,6 +7,7 @@ const products = require('./services/products');
 const customers = require('./services/customers');
 const orders = require('./services/orders');
 const bills = require('./services/bills');
+const sales = require('./services/sales');
 const dashboard = require('./services/dashboard');
 const market = require('./services/market');
 const { resetDemo, clearAll } = require('./seed');
@@ -23,7 +24,6 @@ module.exports = [
   // ---- dashboard
   ['GET', '/api/dashboard', () => dashboard.overview()],
   ['GET', '/api/dashboard/outstanding', ({ query }) => ({ items: dashboard.outstanding(query) })],
-  ['GET', '/api/dashboard/credit', ({ query }) => ({ items: dashboard.creditsGiven(query) })],
 
   // ---- customers
   ['GET', '/api/customers', ({ query }) => customers.list(query)],
@@ -61,18 +61,16 @@ module.exports = [
   ['POST', '/api/orders/preview', ({ body }) => orders.previewOrder(body)],
   ['POST', '/api/orders', ({ body }) => orders.createOrder(body)],
   ['GET', '/api/orders/:id', ({ params }) => orders.getOrder(id(params))],
-  ['DELETE', '/api/orders/:id', ({ params }) => orders.deleteDraft(id(params))],
-  ['POST', '/api/orders/:id/confirm', ({ params, body }) => orders.confirmDraft(id(params), body)],
+  ['POST', '/api/orders/:id/accept', ({ params }) => orders.acceptOrder(id(params))],
   ['POST', '/api/orders/:id/payments', ({ params, body }) => orders.addPayment(id(params), body)],
   ['POST', '/api/orders/:id/ready', ({ params, body }) => orders.setReady(id(params), body.ready !== false)],
   ['PUT', '/api/orders/:id/delivery-date', ({ params, body }) => orders.updateDeliveryDate(id(params), body.expected_delivery_date)],
   ['POST', '/api/orders/:id/deliver', ({ params, body }) => orders.deliver(id(params), body)],
-  ['PUT', '/api/orders/:id/credit-due-date', ({ params, body }) => orders.updateCreditDueDate(id(params), body.credit_due_date)],
   ['POST', '/api/orders/:id/cancel', ({ params, body }) => orders.cancelOrder(id(params), body.reason)],
-  ['POST', '/api/orders/:id/bill', ({ params }) => bills.generate(id(params))],
 
   // ---- billing
   ['GET', '/api/billing/overview', () => bills.overview()],
+  ['POST', '/api/sales', ({ body }) => sales.createSale(body)],
   ['GET', '/api/bills', ({ query }) => bills.list(query)],
   ['GET', '/api/bills/:id', ({ params }) => bills.get(id(params))],
 

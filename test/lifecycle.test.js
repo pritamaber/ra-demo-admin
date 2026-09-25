@@ -10,6 +10,7 @@ const customers = require('../src/services/customers');
 const products = require('../src/services/products');
 const orders = require('../src/services/orders');
 const bills = require('../src/services/bills');
+const sales = require('../src/services/sales');
 const dashboard = require('../src/services/dashboard');
 const market = require('../src/services/market');
 const settings = require('../src/services/settings');
@@ -19,32 +20,23 @@ const pricing = require('../src/services/pricing');
 seed();
 
 const rahul = () => customers.findByPhone('9876543210');
-const rahulOrder = () => {
-  const row = orders.listOrders({ customer_id: rahul().id, view: 'open' }).items[0];
-  return orders.getOrder(row.id);
-};
-const near = (actual, expected, msg) => assert.ok(Math.abs(actual - expected) < 0.005, `${msg}: expected ${expected}, got ${actual}`);
+const rahulOrder = () => orders.getOrder(orders.listOrders({ customer_id: rahul().id, view: 'open' }).items[0].id);
+const product = (name) => products.listProducts({ q: name }).items[0];
 
-test('pricing engine: gold + making + GST from configured rules', () => {
-  const rules = settings.getRules();
-  const p = pricing.priceOrder({
-    items: [{ quantity: 1, net_weight: 10, making_method: 'per_gram', making_rate: 850, rate: 14720 }],
-    otherCharges: 0, rules,
-  });
+test('price formula: gold + making + GST on both, rounded to the rupee', () => {
+  const p = pricing.priceOrder({ items: [{ net_weight: 10, making_rate: 850, rate: 14720 }], otherCharges: 0, gstRate: 3 });
   assert.equal(p.gold_value, 147200);
   assert.equal(p.making_charge, 8500);
   assert.equal(p.gst, 4671); // 3% of 155,700
   assert.equal(p.total, 160371);
 
-  const goldOnly = pricing.priceOrder({
-    items: [{ quantity: 1, net_weight: 10, making_method: 'per_gram', making_rate: 850, rate: 14720 }],
-    otherCharges: 0, rules: { ...rules, gst_basis: 'gold_only' },
-  });
-  assert.equal(goldOnly.gst, 4416);
+  const withOther = pricing.priceOrder({ items: [{ net_weight: 10, making_rate: 850, rate: 14720 }], otherCharges: 500, gstRate: 3 });
+  assert.equal(withOther.gst, 4671, 'other charges carry no GST');
+  assert.equal(withOther.total, 160871);
 });
 
 test('net gold weight is derived from gross - stone, never stored by hand', () => {
-  const ring = products.listProducts({ q: "Men's Gold Ring" }).items[0];
+  const ring = product("Men's Gold Ring");
   assert.equal(ring.gross_weight, 10.25);
   assert.equal(ring.stone_weight, 0.25);
   assert.equal(ring.net_gold_weight, 10);
@@ -59,139 +51,159 @@ test('seed data has the shape the demo needs', () => {
   assert.ok(outstanding.length >= 4);
   assert.ok(outstanding.some((o) => o.due_flag === 'OVERDUE'));
   assert.ok(outstanding.some((o) => o.due_flag === 'DUE_TODAY'));
-  assert.equal(orders.listOrders({ view: 'completed' }).total, 3);
-  assert.equal(bills.list().total, 2);
+  assert.equal(orders.listOrders({ view: 'delivered' }).total, 4); // three booked orders + one walk-in bill
+  assert.equal(bills.list().total, 4, 'every delivered order has its bill');
+  assert.ok(orders.listOrders({ status: 'PLACED' }).total >= 1, 'a placed order still waiting for the shop to accept it');
 });
 
-test("Rahul Das: day-one order at ₹14,720/g with ₹50,000 advance is Partially Paid", () => {
+test('Rahul Das: order at ₹14,720/g with ₹50,000 paid is accepted and partly paid', () => {
   const r = rahulOrder();
   assert.equal(r.customer.name, 'Rahul Das');
-  assert.equal(r.order.status, 'PARTIALLY_PAID');
+  assert.equal(r.order.status, 'ACCEPTED');
+  assert.equal(r.order.payment_status, 'PARTIAL');
   assert.equal(r.order.order_gold_rate, 14720);
-  assert.equal(r.order.estimated_total, 160371);
+  assert.equal(r.order.total_amount, 160371);
   assert.equal(r.order.paid_amount, 50000);
   assert.equal(r.order.outstanding_amount, 110371);
   assert.equal(r.bill, null, 'no bill before delivery');
-  // the payment keeps its rupee value; grams are informational, kept at full precision
-  const pay = r.payments[0];
-  assert.equal(pay.amount, 50000);
-  assert.equal(pay.gold_rate_at_payment, 14720);
-  assert.equal(pay.gold_equivalent, 50000 / 14720);
-  assert.equal(r.settlement.payments.total_paid, 50000);
+  assert.equal(r.payments[0].amount, 50000);
+  assert.equal(r.payments[0].kind, 'Advance');
+  assert.deepEqual(r.price.lines[0], {
+    item_id: r.price.lines[0].item_id, name: '22K Classic Gold Chain', quantity: 1, purity: '22K', net_weight: 10,
+    gold_rate: 14720, gold_value: 147200, making_rate: 850, making_charge: 8500, gst: 4671, total: 160371,
+  });
 });
 
-test('gold rate change re-prices the open order but preserves history', () => {
-  const before = rahulOrder();
-  const res = market.setGoldRate({ purity: '22K', rate_per_gram: 15000, note: 'Market move' });
-  assert.ok(res.repriced_orders >= 1);
-
-  const after = rahulOrder();
-  assert.equal(after.order.order_gold_rate, 14720, 'order-date rate is preserved');
-  assert.equal(after.order.estimated_total, 160371, 'original estimate is preserved');
-  assert.equal(after.payments[0].gold_rate_at_payment, 14720, 'payment keeps the rate it was made at');
-  assert.equal(after.settlement.delivery.gold_rate, 15000);
-  assert.equal(after.settlement.delivery.gold_value, 150000);
-  assert.equal(after.settlement.delivery.making_charge, 8500, 'making charge is fixed from the order date');
-  assert.equal(after.settlement.delivery.gst, 4755);
-  assert.equal(after.order.total_amount, 163255);
-  assert.equal(after.order.outstanding_amount, 113255);
-  assert.ok(after.order.outstanding_amount > before.order.outstanding_amount);
-
-  // history keeps every entry
-  const hist = goldRates.history({ purity: '22K' });
-  assert.ok(hist.some((h) => h.rate_per_gram === 14650));
-  assert.ok(hist.some((h) => h.rate_per_gram === 14720));
-  assert.equal(goldRates.getRate('22K'), 15000);
-  assert.equal(goldRates.getRate('22K', '2026-01-01'), 14480, 'before history starts falls back to the earliest rate');
-
-  // dashboard total moved with it
-  assert.ok(dashboard.overview().outstanding.find((o) => o.id === after.order.id).outstanding_amount === 113255);
+test('a gold-rate change never re-prices a placed order', () => {
+  const before = rahulOrder().order;
+  const rate = goldRates.getRate('22K');
+  market.setGoldRate({ purity: '22K', rate_per_gram: rate + 400 });
+  const after = rahulOrder().order;
+  assert.equal(after.total_amount, before.total_amount);
+  assert.equal(after.outstanding_amount, before.outstanding_amount);
+  assert.equal(after.order_gold_rate, 14720);
+  // ...but a new order picks up the new rate
+  const chain = product('Classic Gold Chain');
+  assert.equal(orders.previewOrder({ items: [{ product_id: chain.id }] }).lines[0].gold_rate, rate + 400);
 });
 
 test('payments are append-only and cannot be overpaid', () => {
   const r = rahulOrder();
-  assert.throws(() => q.run('UPDATE payments SET amount = 1 WHERE order_id = ?', r.order.id), /immutable/);
-  assert.throws(() => q.run('DELETE FROM payments WHERE order_id = ?', r.order.id), /cannot be deleted/);
   assert.throws(() => orders.addPayment(r.order.id, { amount: 999999, payment_method: 'Cash' }), /more than the/);
-  assert.throws(() => orders.addPayment(r.order.id, { amount: 100, payment_method: 'Barter' }), /Payment method/);
+  assert.throws(() => orders.addPayment(r.order.id, { amount: 100, payment_method: 'Bitcoin' }), /Payment method/);
+  const pay = r.payments[0];
+  assert.throws(() => q.run('UPDATE payments SET amount = 1 WHERE id = ?', pay.id), /immutable/);
+  assert.throws(() => q.run('DELETE FROM payments WHERE id = ?', pay.id), /cannot be deleted/);
 });
 
 test('a part payment updates order, customer and dashboard together', () => {
   const r = rahulOrder();
-  const custBefore = rahul();
+  const custBefore = customers.getSummary(rahul().id);
   const dashBefore = dashboard.overview().kpis;
-  const updated = orders.addPayment(r.order.id, { amount: 20000, payment_method: 'Cash', notes: 'Part payment' });
-  assert.equal(updated.order.paid_amount, 70000);
-  assert.equal(updated.order.outstanding_amount, 93255);
-  assert.equal(updated.payments.length, 2, 'earlier payment is still there');
-  assert.equal(rahul().total_outstanding, custBefore.total_outstanding - 20000);
+  const res = orders.addPayment(r.order.id, { amount: 20000, payment_method: 'Cash' });
+  assert.equal(res.order.paid_amount, 70000);
+  assert.equal(res.order.outstanding_amount, 90371);
+  assert.equal(res.payments[1].kind, 'Part payment');
+  const custAfter = customers.getSummary(rahul().id);
+  assert.equal(custAfter.total_outstanding, custBefore.total_outstanding - 20000);
+  assert.equal(custAfter.total_paid, custBefore.total_paid + 20000);
   const dashAfter = dashboard.overview().kpis;
-  near(dashAfter.outstanding_amount, dashBefore.outstanding_amount - 20000, 'dashboard outstanding');
+  assert.equal(dashAfter.outstanding_amount, dashBefore.outstanding_amount - 20000);
   assert.equal(dashAfter.todays_collections, dashBefore.todays_collections + 20000);
 });
 
 test('delivery is refused while money is due, and rolls back cleanly', () => {
   const r = rahulOrder();
-  const paymentsBefore = q.get('SELECT COUNT(*) AS n FROM payments').n;
+  const chain = product('Classic Gold Chain');
+  const stock = products.getProduct(chain.id);
+  assert.throws(() => orders.deliver(r.order.id, {}), /still due/);
   assert.throws(() => orders.deliver(r.order.id, { payment: { amount: 1000, payment_method: 'Cash' } }), /still due/);
-  assert.equal(q.get('SELECT COUNT(*) AS n FROM payments').n, paymentsBefore, 'attempted payment was rolled back');
-  assert.equal(orders.getOrder(r.order.id).order.status, 'PARTIALLY_PAID');
-  assert.throws(() => bills.generate(r.order.id), /delivered/);
+  const after = orders.getOrder(r.order.id);
+  assert.equal(after.order.status, 'ACCEPTED');
+  assert.equal(after.order.paid_amount, r.order.paid_amount, 'the failed attempt left no payment behind');
+  assert.equal(products.getProduct(chain.id).stock_quantity, stock.stock_quantity);
 });
 
-test('settle & deliver: stock, status, bill and purchase history all update', () => {
-  const r = rahulOrder();
-  const chain = products.getProduct(r.items[0].product_id);
-  assert.equal(chain.reserved_quantity, 1);
-  const stockBefore = chain.stock_quantity;
+test('order lifecycle: placed -> accepted -> ready -> delivered, bill created automatically', () => {
+  const buyer = rahul();
+  const ring = product('Plain Band Ring');
+  const before = products.getProduct(ring.id);
+  const placed = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: ring.id }], expected_delivery_date: clock.today(), payment: { amount: 5000, payment_method: 'UPI' } });
+  const id = placed.order.id;
+  assert.equal(placed.order.status, 'PLACED');
+  assert.equal(products.getProduct(ring.id).reserved_quantity, before.reserved_quantity + 1);
+  assert.throws(() => orders.setReady(id, true), /Accept the order first/);
+  assert.throws(() => orders.deliver(id, {}), /Accept the order/);
 
-  const due = r.settlement.delivery.outstanding;
-  assert.equal(due, 93255);
-  const delivered = orders.deliver(r.order.id, { payment: { amount: due, payment_method: 'Card', reference_number: 'Card ****1111' } });
-  assert.equal(delivered.order.status, 'DELIVERED');
-  assert.equal(delivered.order.delivery_gold_rate, 15000);
-  assert.equal(delivered.order.outstanding_amount, 0);
-  assert.equal(delivered.settlement.is_final, true);
-  assert.equal(delivered.payments.at(-1).kind, 'Final payment');
+  assert.equal(orders.acceptOrder(id).order.status, 'ACCEPTED');
+  assert.throws(() => orders.acceptOrder(id), /newly placed/);
+  assert.equal(orders.setReady(id, true).order.status, 'READY');
+  assert.equal(orders.setReady(id, false).order.status, 'ACCEPTED');
+  orders.setReady(id, true);
 
-  const after = products.getProduct(chain.id);
-  assert.equal(after.stock_quantity, stockBefore - 1, 'stock reduced on delivery');
-  assert.equal(after.reserved_quantity, 0, 'reservation consumed');
-  assert.equal(after.sold_quantity, chain.sold_quantity + 1);
-  const move = products.movements({ product_id: chain.id }).items[0];
-  assert.equal(move.movement_type, 'SALE');
-  assert.equal(move.order_number, delivered.order.order_number);
+  // the delivery date stays editable until delivery
+  const moved = orders.updateDeliveryDate(id, '2099-01-01');
+  assert.equal(moved.order.expected_delivery_date, '2099-01-01');
+  assert.throws(() => orders.updateDeliveryDate(id, '2000-01-01'), /before the order date/);
 
-  // no longer outstanding anywhere
-  assert.ok(!dashboard.outstanding().some((o) => o.id === r.order.id));
-  // frozen: a later rate change no longer touches it
-  market.setGoldRate({ purity: '22K', rate_per_gram: 15500 });
-  assert.equal(orders.getOrder(r.order.id).order.total_amount, 163255);
-  assert.throws(() => orders.addPayment(r.order.id, { amount: 1, payment_method: 'Cash' }), /cannot be added/);
+  const due = orders.getOrder(id).order.outstanding_amount;
+  const done = orders.deliver(id, { payment: { amount: due, payment_method: 'Card', reference_number: 'AUTH 1' } });
+  assert.equal(done.order.status, 'DELIVERED');
+  assert.equal(done.order.outstanding_amount, 0);
+  assert.equal(done.order.actual_delivery_date, clock.today());
+  assert.ok(done.bill, 'a final bill was generated automatically');
+  assert.match(done.bill.bill_number, /^RAJ\/\d{4}-\d{2}\/\d{4}$/);
+  assert.deepEqual(done.payments.map((p) => p.kind), ['Advance', 'Final payment']);
 
-  // final bill
-  const bill = bills.generate(r.order.id);
-  assert.match(bill.bill_number, /^RAJ\/\d{4}-\d{2}\/\d{4}$/);
-  assert.equal(bill.total_amount, 163255);
-  assert.equal(bill.bill.items[0].gold_value, 150000);
-  assert.equal(bill.bill.items[0].net_gold_weight, 10);
-  assert.equal(bill.bill.totals.cgst + bill.bill.totals.sgst, 4755);
-  assert.equal(bill.bill.previous_payments.count, 2);
-  assert.equal(bill.bill.final_payment.amount, 93255);
-  assert.equal(bill.bill.total_paid, 163255);
-  assert.match(bill.bill.totals.amount_in_words, /^Rupees One Lakh Sixty Three Thousand Two Hundred Fifty Five Only$/);
-  assert.throws(() => bills.generate(r.order.id), /already/);
-  assert.equal(orders.getOrder(r.order.id).order.status, 'BILLED');
+  const after = products.getProduct(ring.id);
+  assert.equal(after.stock_quantity, before.stock_quantity - 1);
+  assert.equal(after.reserved_quantity, before.reserved_quantity);
+  const moves = products.movements({ order_id: id }).items.map((m) => m.movement_type).sort();
+  assert.deepEqual(moves, ['RESERVE', 'SALE']);
 
-  // customer purchase history
-  const profile = customers.getProfile(rahul().id);
-  assert.ok(profile.bills.some((b) => b.bill_number === bill.bill_number));
-  assert.equal(profile.customer.total_outstanding, 0);
+  // it is history now: nothing else can change
+  assert.throws(() => orders.addPayment(id, { amount: 1, payment_method: 'Cash' }), /already delivered/);
+  assert.throws(() => orders.cancelOrder(id, 'x'), /already delivered/);
+  assert.throws(() => orders.updateDeliveryDate(id, '2099-02-02'), /already delivered/);
+
+  // bill: exact snapshot, immutable
+  const bill = bills.get(done.bill.id);
+  assert.equal(bill.bill.totals.total, done.order.total_amount);
+  assert.equal(bill.bill.total_paid, done.order.total_amount);
+  assert.equal(bill.bill.customer.phone, '9876543210');
   assert.throws(() => q.run('UPDATE bills SET total_amount = 1 WHERE id = ?', bill.id), /immutable/);
+  assert.throws(() => bills.generate(id), /already been generated/);
+
+  // customer history and dashboard
+  const profile = customers.getProfile(buyer.id);
+  assert.ok(profile.bills.some((b) => b.id === bill.id));
+  assert.ok(!dashboard.outstanding().some((o) => o.id === id));
+});
+
+test('walk-in bill: paid in full, delivered and billed in one step', () => {
+  const buyer = customers.findByPhone('9007123456');
+  const pin = product('Floral Nose Pin');
+  const before = products.getProduct(pin.id);
+  assert.throws(() => sales.createSale({ customer_id: buyer.id, items: [{ product_id: pin.id }] }), /how the customer is paying/);
+
+  const sale = sales.createSale({ customer_id: buyer.id, items: [{ product_id: pin.id, quantity: 2 }], payment: { payment_method: 'UPI', reference_number: 'UPI 1' } });
+  assert.equal(sale.order.kind, 'SALE');
+  assert.equal(sale.order.status, 'DELIVERED');
+  assert.equal(sale.order.outstanding_amount, 0);
+  assert.equal(sale.payments.length, 1);
+  assert.equal(sale.payments[0].kind, 'Full payment');
+  assert.ok(sale.bill);
+  assert.equal(products.getProduct(pin.id).stock_quantity, before.stock_quantity - 2);
+  assert.equal(products.getProduct(pin.id).reserved_quantity, before.reserved_quantity);
+  assert.throws(() => sales.createSale({ customer_id: buyer.id, items: [{ product_id: pin.id }], payment: { payment_method: 'Cash', amount: 5 } }), /paid in full/);
+  // a failed sale leaves nothing behind
+  const count = orders.listOrders({}).total;
+  assert.throws(() => sales.createSale({ customer_id: buyer.id, items: [{ product_id: pin.id, quantity: 90 }], payment: { payment_method: 'Cash' } }), /only \d+ available/);
+  assert.equal(orders.listOrders({}).total, count);
 });
 
 test('restocking an out-of-stock product records history and clears the flag', () => {
-  const churi = products.listProducts({ q: 'Designer Churi' }).items[0];
+  const churi = product('Designer Churi');
   assert.equal(churi.stock_status, 'OUT_OF_STOCK');
   assert.equal(churi.stock_quantity, 0);
   const res = products.adjustStock(churi.id, { type: 'RESTOCK', quantity: 5, reason: 'New batch' });
@@ -203,67 +215,39 @@ test('restocking an out-of-stock product records history and clears the flag', (
 });
 
 test('orders cannot reserve more than is available; cancelling releases stock', () => {
-  const choker = products.listProducts({ q: 'Gold Choker' }).items[0];
+  const choker = product('Gold Choker');
   const buyer = customers.findByPhone('9748123456');
   assert.throws(() => orders.createOrder({ customer_id: buyer.id, items: [{ product_id: choker.id, quantity: 3 }] }), /only 2 available/);
 
-  const o = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: choker.id, quantity: 2 }], advance: { amount: 10000, payment_method: 'UPI' } });
+  const o = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: choker.id, quantity: 2 }], payment: { amount: 10000, payment_method: 'UPI' } });
   assert.equal(products.getProduct(choker.id).available_quantity, 0);
   assert.equal(products.getProduct(choker.id).stock_status, 'OUT_OF_STOCK');
-  assert.equal(o.order.status, 'ADVANCE_RECEIVED'); // 10,000 is under the 10% required advance
 
-  orders.setReady(o.order.id, true);
-  assert.equal(orders.getOrder(o.order.id).order.status, 'READY_FOR_DELIVERY');
   const cancelled = orders.cancelOrder(o.order.id, 'Test');
   assert.equal(cancelled.order.status, 'CANCELLED');
+  assert.equal(cancelled.order.outstanding_amount, 0);
   assert.equal(products.getProduct(choker.id).available_quantity, 2, 'reservation released');
   assert.equal(cancelled.order.paid_amount, 10000, 'payment history is kept');
+  assert.throws(() => orders.addPayment(o.order.id, { amount: 100, payment_method: 'Cash' }), /cancelled/);
 });
 
-test('pricing rules are configurable and change the outcome', () => {
-  const buyer = customers.findByPhone('9830123456');
-  const ring = products.listProducts({ q: 'Plain Band Ring' }).items[0];
-  const make = () => orders.createOrder({ customer_id: buyer.id, items: [{ product_id: ring.id }], advance: { amount: 10000, payment_method: 'Cash' } });
-
-  // Gold-equivalent credit: ₹10,000 buys grams at today's rate, valued at the settlement rate.
-  const o1 = make();
-  const rate1 = goldRates.getRate('22K');
-  market.setGoldRate({ purity: '22K', rate_per_gram: rate1 + 500 });
-  assert.equal(orders.getOrder(o1.order.id).settlement.payments.credit_applied, 10000, 'monetary credit by default');
-  market.updateSettings({ advance_treatment: 'gold_equivalent_credit' });
-  const s = orders.getOrder(o1.order.id).settlement;
-  near(s.payments.credit_applied, (10000 / rate1) * (rate1 + 500), 'gold-equivalent credit');
-  assert.equal(s.payments.total_paid, 10000, 'actual money received is unchanged');
-  assert.ok(s.rules.find((r) => r.key === 'advance_treatment').text.includes('Gold-equivalent'));
-
-  // Lock the gold value at the order-date rate.
-  market.updateSettings({ advance_treatment: 'monetary_credit', gold_rate_settlement: 'order_date_rate' });
-  const locked = orders.getOrder(o1.order.id);
-  assert.equal(locked.settlement.delivery.gold_rate, locked.order.order_gold_rate);
-  assert.equal(locked.order.total_amount, locked.order.estimated_total);
-
-  market.updateSettings({ gold_rate_settlement: 'delivery_date_rate' });
+test('GST is the one pricing setting and it applies to new orders only', () => {
+  assert.deepEqual(Object.keys(settings.getRules()), ['gst_rate']);
+  const existing = rahulOrder().order;
+  market.updateSettings({ gst_rate: 5 });
+  const chain = product('Rope Chain');
+  const preview = orders.previewOrder({ items: [{ product_id: chain.id }] });
+  assert.equal(preview.gst_rate, 5);
+  assert.equal(preview.totals.gst, Math.round((preview.totals.gold_value + preview.totals.making_charge) * 0.05));
+  assert.equal(rahulOrder().order.total_amount, existing.total_amount, 'a placed order keeps the GST it was priced with');
   assert.throws(() => market.updateSettings({ gst_rate: 90 }), /at most/);
-  assert.throws(() => market.updateSettings({ gst_basis: 'nonsense' }), /Invalid value/);
-});
-
-test('draft orders reserve nothing until confirmed', () => {
-  const buyer = customers.findByPhone('9433012345');
-  const bracelet = products.listProducts({ q: "Baby Bracelet" }).items[0];
-  const draft = orders.createOrder({ mode: 'draft', customer_id: buyer.id, items: [{ product_id: bracelet.id }] });
-  assert.equal(draft.order.status, 'DRAFT');
-  assert.equal(products.getProduct(bracelet.id).reserved_quantity, 0);
-  assert.throws(() => orders.addPayment(draft.order.id, { amount: 100, payment_method: 'Cash' }), /cannot be added/);
-  const confirmed = orders.confirmDraft(draft.order.id, { advance: { amount: 5000, payment_method: 'Cash' } });
-  assert.equal(products.getProduct(bracelet.id).reserved_quantity, 1);
-  assert.equal(confirmed.order.status, 'ADVANCE_RECEIVED');
-  const d2 = orders.createOrder({ mode: 'draft', customer_id: buyer.id, items: [{ product_id: bracelet.id }] });
-  assert.deepEqual(orders.deleteDraft(d2.order.id), { deleted: true });
+  assert.throws(() => market.updateSettings({ making_charge_method: 'per_gram' }), /Unknown setting/);
+  market.updateSettings({ gst_rate: 3 });
 });
 
 test('new customers can be created inline and phone numbers stay unique', () => {
-  const ring = products.listProducts({ q: 'Om Pendant' }).items[0];
-  const o = orders.createOrder({ customer: { name: 'Debjani Roy', phone: '+91 98123 45670', city: 'Kolkata' }, items: [{ product_id: ring.id }] });
+  const pendant = product('Om Pendant');
+  const o = orders.createOrder({ customer: { name: 'Debjani Roy', phone: '+91 98123 45670', city: 'Kolkata' }, items: [{ product_id: pendant.id }] });
   assert.equal(o.customer.phone, '9812345670');
   assert.equal(customers.findByPhone('98123-45670').name, 'Debjani Roy');
   assert.throws(() => customers.create({ name: 'Someone Else', phone: '9812345670' }), /already belongs/);
