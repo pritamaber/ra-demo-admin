@@ -365,6 +365,26 @@ textarea { resize: vertical; min-height: 60px; }
 
 /* ------------------------------------------------------------ new order */
 .line-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 34px; gap: 10px; align-items: end; margin-bottom: 10px; }
+.gp { padding-top: 6px; padding-bottom: 6px; }
+.gp-step { padding: 14px 0; border-top: 1px solid var(--line-2); }
+.gp-step:first-child { border-top: 0; }
+.gp-head { display: flex; align-items: center; gap: 10px; font-weight: 650; margin-bottom: 8px; flex-wrap: wrap; }
+.gp-num { width: 24px; height: 24px; border-radius: 50%; background: var(--maroon); color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+.gp-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 4px 0 4px 34px; }
+.gp-row small { color: var(--muted); font-size: 12.5px; }
+.gp-row b { text-align: right; font-weight: 650; }
+.gp-row.big { border-top: 1px dashed var(--line); margin-top: 4px; padding-top: 8px; font-size: 15.5px; }
+.gp-row.big b { font-weight: 700; }
+.gp-note { padding: 2px 0 2px 34px; color: var(--muted); font-size: 13px; }
+.gp-good { color: var(--green); }
+.gp-worse { color: var(--red); }
+.gp-final { background: var(--gold-soft); margin: 4px -18px -6px; padding: 14px 18px; border-top: 1px solid #ecd9a4; border-radius: 0 0 var(--radius) var(--radius); }
+.gp-final .gp-row { padding-left: 0; }
+.gp-final .gp-note { padding-left: 0; }
+.gp-final .gp-row.total { margin: 8px -8px 2px; padding: 10px 8px; border-radius: 8px; background: var(--maroon-soft); font-size: 16px; }
+.gp-final .gp-row.total b { color: var(--maroon); font-size: 19px; }
+.gp-final .gp-row.total.zero { background: var(--green-soft); }
+.gp-final .gp-row.total.zero b { color: var(--green); }
 .breakup { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: #fffdf8; }
 .bk-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
 .bk-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; }

@@ -698,28 +698,66 @@ export async function orderDetailPage({ el, params, isCurrent }) {
     </div>
 
     <div class="card" style="margin-top:18px">
-      <div class="card-head"><h2>Gold &amp; price</h2><span class="muted small">Gold you have paid for stays at the rate of the day you paid · unpaid gold follows today's rate</span></div>
-      <div class="card-body">
-        ${kv(`Gold booked: ${grams(sm.net_weight)} at ${perGram(sm.booked.gold_rate)} (${fmtDate(o.order_date, false)})`, inr(sm.booked.gold_value), 'sub')}
-        ${sm.gold_purchases.map((g) => kv(`Paid ${fmtDate(g.date, false)}: ${inr(g.amount)} at ${perGram(g.rate)}`, `${grams(g.grams)} bought`, 'credit'))}
-        ${sm.gold_remaining_grams > 0.0005
-          ? kv(`Still to pay: ${grams(sm.gold_remaining_grams)} at ${o.status === 'DELIVERED' ? 'the day' : "today's"} ${perGram(sm.gold_rate_today)}`, inr(sm.remaining.gold_value))
-          : kv('All the gold is paid for', grams(sm.net_weight), 'credit')}
-        ${kv('Gold value', inr(sm.gold_value), 'sub')}
-        ${kv(`Making charge${sm.booked.making_charge - sm.making_charge > 0.005 ? ` (quoted ${inr(sm.booked.making_charge)})` : ''}`, inr(sm.making_charge))}
-        ${kv(`GST @ ${price.gst_rate}% on gold + making`, inr(sm.gst))}
-        ${sm.other_charges ? kv(`Other charges${price.other_charges_note ? ` (${price.other_charges_note})` : ''}`, inr(sm.other_charges)) : ''}
-        ${sm.round_off ? kv('Round off', roundOffText(sm.round_off)) : ''}
-        ${kv(sm.is_final ? 'Final amount' : 'Order total now', inr(sm.total), 'total')}
-        ${sm.total_change ? html`<div class="kv sub"><span class="k">Booked at ${inr(sm.booked.total)} — ${sm.total_change > 0 ? 'up' : 'down'} ${inr(Math.abs(sm.total_change))} as the gold rate moved</span><span class="v"></span></div>` : ''}
-        ${kv('Paid', '− ' + inr(o.paid_amount), 'credit')}
-        ${o.status === 'CANCELLED' ? '' : kv('Balance due', inr(o.outstanding_amount), `due ${o.outstanding_amount <= 0.005 ? 'zero' : ''}`)}
-        ${o.outstanding_amount > 0.005 && o.status !== 'CANCELLED' ? html`<div class="settle-simple remaining">Still owed: ${[
-          sm.remaining.gold_grams > 0.0005 ? `${grams(sm.remaining.gold_grams)} gold (${inr(sm.remaining.gold_value)})` : '',
-          sm.remaining.making_charge > 0.005 ? `${inr(sm.remaining.making_charge)} making` : '',
-          sm.remaining.other_charges > 0.005 ? `${inr(sm.remaining.other_charges)} other` : '',
-          sm.remaining.gst > 0.005 ? `${inr(sm.remaining.gst)} GST` : '',
-        ].filter(Boolean).join(' + ')}${Math.abs(sm.remaining.round_off) > 0.005 ? ` ${sm.remaining.round_off > 0 ? '+' : '−'} ${inr2(Math.abs(sm.remaining.round_off))} round off` : ''} = <b>${inr(o.outstanding_amount)}</b></div>` : ''}
+      <div class="card-head"><h2>Your bill, step by step</h2><span class="muted small">Gold you have paid for stays at that day's price · gold still to pay is counted at today's price</span></div>
+      <div class="card-body gp">
+        <section class="gp-step">
+          <div class="gp-head"><span class="gp-num">1</span>On the order day, ${fmtDate(o.order_date)} <span class="muted">— gold was ${perGram(sm.booked.gold_rate)}</span></div>
+          <div class="gp-row"><span>Gold <small>${grams(sm.net_weight)} × ${perGram(sm.booked.gold_rate)}</small></span><b>${inr(sm.booked.gold_value)}</b></div>
+          <div class="gp-row"><span>Making charge</span><b>${inr(sm.booked.making_charge)}</b></div>
+          <div class="gp-row"><span>GST <small>${price.gst_rate}% on gold + making</small></span><b>${inr(sm.booked.gst)}</b></div>
+          <div class="gp-row big"><span>Bill on that day</span><b>${inr(sm.booked.total)}</b></div>
+        </section>
+
+        <section class="gp-step">
+          <div class="gp-head"><span class="gp-num">2</span>What has been paid</div>
+          ${sm.gold_purchases.length ? sm.gold_purchases.map((g) => html`<div class="gp-row"><span>${fmtDate(g.date, false)} · ${inr(g.amount)} <small>at ${perGram(g.rate)}</small></span><b class="gp-good">= ${grams(g.grams)} of gold</b></div>`) : html`<div class="gp-note">Nothing has been paid yet.</div>`}
+          ${sm.paid > sm.gold_paid_amount + 0.005 ? html`<div class="gp-row"><span>Paid towards making charge &amp; GST</span><b>${inr(sm.paid - sm.gold_paid_amount)}</b></div>` : ''}
+          <div class="gp-row big"><span>Total paid</span><b>${inr(sm.paid)}${sm.gold_paid_grams > 0 ? html` <span class="gp-good">= ${grams(sm.gold_paid_grams)} of gold</span>` : ''}</b></div>
+        </section>
+
+        <section class="gp-step">
+          <div class="gp-head"><span class="gp-num">3</span>${sm.gold_remaining_grams > 0.0005 ? 'Gold still to pay' : 'Gold'}</div>
+          ${sm.gold_remaining_grams > 0.0005 ? html`
+            <div class="gp-row"><span>Gold ordered</span><b>${grams(sm.net_weight)}</b></div>
+            <div class="gp-row"><span>Already paid for</span><b>− ${grams(sm.gold_paid_grams)}</b></div>
+            <div class="gp-row big"><span>Gold left to pay</span><b>${grams(sm.gold_remaining_grams)}</b></div>
+            <div class="gp-row"><span>${sm.is_final ? 'Price on the day' : "Today's gold price"}</span><b>${perGram(sm.gold_rate_today)}</b></div>
+            <div class="gp-row big"><span>${grams(sm.gold_remaining_grams)} at ${sm.is_final ? 'that' : "today's"} price</span><b>${inr(sm.remaining.gold_value)}</b></div>
+            ${Math.abs(sm.effect.remaining_gold_then - sm.remaining.gold_value) > 0.005 ? html`<div class="gp-note">On the order day this gold would have been ${inr(sm.effect.remaining_gold_then)}.</div>` : ''}`
+            : html`<div class="gp-row big"><span>All ${grams(sm.net_weight)} of gold is paid for</span><b class="gp-good">✓</b></div>`}
+        </section>
+
+        <section class="gp-step">
+          <div class="gp-head"><span class="gp-num">4</span>Making charge &amp; GST${sm.remaining.making_charge + sm.remaining.gst < 0.005 ? ' — paid' : ' still to pay'}</div>
+          <div class="gp-row"><span>Making charge${sm.booked.making_charge - sm.making_charge > 0.005 ? html` <small>(quoted ${inr(sm.booked.making_charge)}, agreed ${inr(sm.making_charge)})</small>` : ''}</span><b>${inr(sm.remaining.making_charge)}${sm.remaining.making_charge < sm.making_charge - 0.005 ? html` <small class="muted">of ${inr(sm.making_charge)}</small>` : ''}</b></div>
+          <div class="gp-row"><span>GST <small>${price.gst_rate}% on gold + making</small></span><b>${inr(sm.remaining.gst)}${sm.remaining.gst < sm.gst - 0.005 ? html` <small class="muted">of ${inr(sm.gst)}</small>` : ''}</b></div>
+          ${sm.other_charges ? html`<div class="gp-row"><span>Other charges${price.other_charges_note ? ` (${price.other_charges_note})` : ''}</span><b>${inr(sm.remaining.other_charges)}</b></div>` : ''}
+        </section>
+
+        <section class="gp-step">
+          <div class="gp-head"><span class="gp-num">5</span>What the gold price change did to the bill</div>
+          ${Math.abs(sm.effect.rate_change) > 0.005 ? html`
+            <div class="gp-row"><span>Gold price: ${perGram(sm.effect.booked_rate)} then → ${perGram(sm.gold_rate_today)} ${sm.is_final ? 'paid on average' : 'now'}</span><b class="${sm.effect.rate_change > 0 ? 'gp-worse' : 'gp-good'}">${sm.effect.rate_change > 0 ? '▲ up' : '▼ down'} ${inr(Math.abs(sm.effect.rate_change))} per gram</b></div>
+            <div class="gp-row"><span>Gold costs</span><b class="${sm.effect.gold > 0 ? 'gp-worse' : 'gp-good'}">${sm.effect.gold > 0 ? '+' : '−'} ${inr(Math.abs(sm.effect.gold))}</b></div>
+            <div class="gp-row"><span>GST on that</span><b class="${sm.effect.gst > 0 ? 'gp-worse' : 'gp-good'}">${sm.effect.gst >= 0 ? '+' : '−'} ${inr(Math.abs(sm.effect.gst))}</b></div>`
+            : html`<div class="gp-note">The gold price has not changed since the order day, so the gold part of the bill is the same.</div>`}
+          ${Math.abs(sm.effect.making) > 0.005 ? html`<div class="gp-row"><span>Making charge agreed differently</span><b class="${sm.effect.making > 0 ? 'gp-worse' : 'gp-good'}">${sm.effect.making > 0 ? '+' : '−'} ${inr(Math.abs(sm.effect.making))}</b></div>` : ''}
+          ${Math.abs(sm.effect.rounding) > 0.005 ? html`<div class="gp-row"><span>Rounding${Math.abs(sm.effect.rounding) > 1 ? ' &amp; other charges' : ''}</span><b>${sm.effect.rounding > 0 ? '+' : '−'} ${inr2(Math.abs(sm.effect.rounding))}</b></div>` : ''}
+          <div class="gp-row big"><span>${Math.abs(sm.effect.total) < 0.005 ? 'Bill is the same as on the order day' : `Bill is ${sm.effect.total > 0 ? 'higher' : 'lower'} than on the order day`}</span><b class="${sm.effect.total > 0.005 ? 'gp-worse' : sm.effect.total < -0.005 ? 'gp-good' : ''}">${Math.abs(sm.effect.total) < 0.005 ? inr(sm.total) : `${sm.effect.total > 0 ? '+' : '−'} ${inr(Math.abs(sm.effect.total))}`}</b></div>
+          ${Math.abs(sm.effect.total) >= 0.005 ? html`<div class="gp-note">${inr(sm.booked.total)} on the order day → ${inr(sm.total)} ${sm.is_final ? 'final' : 'now'}</div>` : ''}
+        </section>
+
+        <section class="gp-step gp-final">
+          <div class="gp-row"><span>${sm.is_final ? 'Final bill' : 'Bill now'}</span><b>${inr(sm.total)}</b></div>
+          <div class="gp-row"><span>Paid so far</span><b class="gp-good">− ${inr(sm.paid)}</b></div>
+          ${o.status === 'CANCELLED' ? '' : html`<div class="gp-row total ${o.outstanding_amount <= 0.005 ? 'zero' : ''}"><span>Balance to pay</span><b>${inr(o.outstanding_amount)}</b></div>`}
+          ${o.outstanding_amount > 0.005 && o.status !== 'CANCELLED' ? html`<div class="gp-note">That is ${[
+            sm.remaining.gold_grams > 0.0005 ? `gold ${inr(sm.remaining.gold_value)}` : '',
+            sm.remaining.making_charge > 0.005 ? `making ${inr(sm.remaining.making_charge)}` : '',
+            sm.remaining.other_charges > 0.005 ? `other ${inr(sm.remaining.other_charges)}` : '',
+            sm.remaining.gst > 0.005 ? `GST ${inr(sm.remaining.gst)}` : '',
+          ].filter(Boolean).join(' + ')}${Math.abs(sm.remaining.round_off) > 0.005 ? ` (round off ${roundOffText(sm.remaining.round_off)})` : ''}.</div>` : ''}
+        </section>
       </div>
     </div>
 

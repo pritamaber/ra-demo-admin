@@ -547,6 +547,26 @@ function priceBreakdown(order, items) {
   };
 }
 
+/** How far the gold price has moved since the order day and what that did to the bill (all versus the booked figures). */
+function priceMovement(order, items, st) {
+  const weight = st.net_weight;
+  const bookedGold = round2(items.reduce((sum, it) => sum + it.gold_value, 0));
+  const bookedGst = round2(items.reduce((sum, it) => sum + it.gst, 0));
+  const bookedMaking = round2(items.reduce((sum, it) => sum + it.making_rate * lineNetWeight(it), 0));
+  const change = round2(order.total_amount - (order.booked_total || order.total_amount));
+  const gold = round2(st.gold_value - bookedGold);
+  const gst = round2(st.gst - bookedGst);
+  const making = round2(st.making_charge - bookedMaking);
+  return {
+    rate_change: weight > 0 ? round2(st.gold_rate_today - bookedGold / weight) : 0,
+    booked_rate: weight > 0 ? round2(bookedGold / weight) : 0,
+    gold, gst, making,
+    rounding: round2(change - gold - gst - making), // round-off and any change to other charges
+    total: change,
+    remaining_gold_then: round2((1 - st.gold_paid_fraction) * bookedGold), // what the unpaid gold would have cost at the order-day price
+  };
+}
+
 /** The gold-first picture for the order screen: what was booked, what each payment bought, what is still owed today. */
 function buildSettlement(order, items, payments) {
   const st = settlementOf(order, items, payments);
@@ -561,6 +581,7 @@ function buildSettlement(order, items, payments) {
       gst: round2(items.reduce((sum, it) => sum + it.gst, 0)),
     },
     total_change: round2(order.total_amount - (order.booked_total || order.total_amount)),
+    effect: priceMovement(order, items, st),
     gold_purchases: payments.filter((p) => p.gold_fraction > 0).map((p) => ({
       payment_id: p.id, date: p.payment_date, amount: p.gold_amount, rate: p.gold_rate, grams: round3(p.gold_fraction * weight),
     })),
