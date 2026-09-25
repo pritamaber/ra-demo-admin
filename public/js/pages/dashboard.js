@@ -1,4 +1,4 @@
-import { $, $$, api, html, mount, inr, fmtDate, relDays, statusBadge, dueBadge, paymentBadge, empty, waLink, perGram, toast } from '../lib.js';
+import { $, $$, api, html, mount, inr, fmtDate, deliveryNote, statusBadge, empty, waLink, perGram, toast } from '../lib.js';
 
 const state = { sort: 'overdue', filter: 'all' };
 
@@ -22,9 +22,9 @@ function outstandingRows(rows) {
       <td><a class="cell-main" href="#/customers/${o.customer_id}">${o.customer_name}</a>
         <div class="cell-sub"><a href="tel:${o.customer_phone}">${o.customer_phone}</a> · <a target="_blank" rel="noopener" title="Send a WhatsApp reminder" href="${waLink(o.customer_phone, reminder(o))}">WhatsApp</a></div></td>
       <td><a class="nowrap" href="#/orders/${o.id}">${o.order_number}</a><div class="cell-sub">${o.products}</div></td>
-      <td class="nowrap">${fmtDate(o.expected_delivery_date)}<div class="cell-sub">${relDays(o.days_to_delivery)}</div></td>
+      <td class="nowrap">${fmtDate(o.expected_delivery_date)}<div class="cell-sub">${deliveryNote(o)}</div></td>
       <td class="num"><div class="bold" style="color:var(--maroon)">${inr(o.outstanding_amount)}</div><div class="cell-sub">of ${inr(o.total_amount)}</div></td>
-      <td><div class="row" style="gap:4px">${dueBadge(o.due_flag)}${statusBadge(o.status)}</div></td>
+      <td>${statusBadge(o.status)}</td>
     </tr>`)}</tbody>
   </table></div>`;
 }

@@ -1,5 +1,5 @@
 import {
-  $, $$, api, html, mount, inr, inr2, grams, perGram, fmtDate, fmtDateTime, relDays, addDaysIso, todayIso, statusBadge, dueBadge, paymentBadge,
+  $, $$, api, html, mount, inr, inr2, grams, perGram, fmtDate, fmtDateTime, relDays, deliveryNote, addDaysIso, todayIso, statusBadge, paymentBadge,
   moveBadge, empty, openModal, onSubmit, toast, navigate, refresh, debounce, initials, slugify, icon, STATUS_FLOW, statusLabel,
 } from '../lib.js';
 import { openProductDetail } from './catalog.js';
@@ -54,8 +54,8 @@ export async function ordersListPage({ el, query, isCurrent }) {
         <td class="num">${inr(o.total_amount)}</td>
         <td class="num">${inr(o.paid_amount)}</td>
         <td class="num ${o.outstanding_amount > 0 ? 'bold' : 'muted'}">${inr(o.outstanding_amount)}</td>
-        <td class="nowrap">${o.actual_delivery_date ? html`${fmtDate(o.actual_delivery_date)}<div class="cell-sub">delivered</div>` : html`${fmtDate(o.expected_delivery_date)}<div class="cell-sub">${o.status === 'CANCELLED' ? '' : relDays(o.days_to_delivery)}</div>`}</td>
-        <td><div class="row" style="gap:4px">${dueBadge(o.due_flag)}${statusBadge(o.status)}${o.status === 'CANCELLED' ? '' : paymentBadge(o.payment_status)}</div></td>
+        <td class="nowrap">${o.actual_delivery_date ? html`${fmtDate(o.actual_delivery_date)}<div class="cell-sub">delivered</div>` : html`${fmtDate(o.expected_delivery_date)}<div class="cell-sub">${deliveryNote(o)}</div>`}</td>
+        <td>${statusBadge(o.status)}</td>
       </tr>`)}</tbody></table></div>` : empty('No orders match', 'Try another tab or search term.'));
     $$('tr[data-href]', el).forEach((tr) => tr.addEventListener('click', (e) => { if (!e.target.closest('a')) location.hash = tr.dataset.href; }));
   }
@@ -575,7 +575,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
     <div class="crumb"><a href="#/orders">Orders</a> / ${o.order_number}</div>
     <div class="order-head">
       <div>
-        <div class="order-title"><h1>${o.order_number}</h1>${statusBadge(o.status)}${o.status === 'CANCELLED' ? '' : paymentBadge(o.payment_status)}${dueBadge(o.due_flag)}${walkInTag(o)}</div>
+        <div class="order-title"><h1>${o.order_number}</h1>${statusBadge(o.status)}${o.status === 'CANCELLED' ? '' : paymentBadge(o.payment_status)}${walkInTag(o)}</div>
         <div class="muted" style="margin-top:6px"><a href="#/customers/${c.id}" class="bold">${c.name}</a> · <a href="tel:${c.phone}">${c.phone}</a> · placed ${fmtDate(o.order_date)}</div>
       </div>
       <div class="page-actions">
@@ -606,7 +606,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
       <div class="kpi ${o.outstanding_amount > 0 ? 'hero' : ''}"><div class="kpi-label">Balance due</div><div class="kpi-value">${inr(o.outstanding_amount)}</div>
         <div class="kpi-note">${o.status === 'CANCELLED' ? 'cancelled' : o.outstanding_amount > 0 ? paymentBadge(o.payment_status) : 'Paid in full ✓'}</div></div>
       <div class="kpi"><div class="kpi-label">${o.actual_delivery_date ? 'Delivered on' : 'Delivery date'}</div><div class="kpi-value" style="font-size:19px">${fmtDate(o.actual_delivery_date || o.expected_delivery_date)}</div>
-        <div class="kpi-note">${o.actual_delivery_date || o.status === 'CANCELLED' ? '' : relDays(o.days_to_delivery)}</div></div>
+        <div class="kpi-note">${deliveryNote(o)}</div></div>
     </div>
 
     <div class="card">

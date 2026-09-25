@@ -75,6 +75,13 @@ export function relDays(n) {
   if (n === -1) return 'yesterday';
   return n > 0 ? `in ${n} days` : `${-n} days ago`;
 }
+/** "in 3 days" / "today" / "Overdue · 5 days ago" for an open order; nothing once it is delivered or cancelled. */
+export const deliveryNote = (o) => {
+  if (o.status === 'CANCELLED' || o.status === 'DELIVERED' || o.days_to_delivery == null) return '';
+  if (o.due_flag === 'OVERDUE') return html`<span class="late">Overdue · ${relDays(o.days_to_delivery)}</span>`;
+  if (o.due_flag === 'DUE_TODAY') return html`<span class="soon">Due today</span>`;
+  return relDays(o.days_to_delivery);
+};
 // Making charge is always rupees per gram of net gold.
 export const makingUnit = () => '₹ per gram';
 export const makingText = (_method, rate) => `${inr(rate)}/g`;
