@@ -51,11 +51,13 @@ One formula for every order and bill, **fixed on the day the order is placed** �
 gold value = net weight (g) × gold rate of that day (₹/g)
 making     = net weight (g) × the product's making rate (₹/g)
 GST        = GST% × (gold value + making)                  → 3% by default
-total      = gold value + making + GST + other charges     (other charges: optional, no GST)
+total      = gold value + making + GST + other charges, rounded to the nearest rupee
+             (other charges: optional, no GST; the rounding shows as its own "Round off" line)
 ```
 
-Every amount is rounded to the rupee. On the order form the shopkeeper can **edit each item for that order** — name, description, purity, gross/stone weight (net is calculated), making rate and gold rate — without touching the catalogue product. The only pricing setting is the GST rate (Settings); a new rate applies to orders placed from then on.
+Amounts are kept to the paisa (GST included); only the grand total is rounded, and the difference is printed as a **Round off** line (for example +₹0.04). On the order form the shopkeeper can **edit each item for that order** — name, description, purity, gross/stone weight (net is calculated), making rate and gold rate — without touching the catalogue product. The only pricing setting is the GST rate (Settings); a new rate applies to orders placed from then on.
 Example: 10 g at ₹14,720/g with ₹850/g making → ₹1,47,200 + ₹8,500 + ₹4,671 GST = **₹1,60,371**.
+Example with round-off: 15.6 g at ₹14,720/g with ₹750/g making → ₹2,29,632 + ₹11,700 + ₹7,239.96 GST = ₹2,48,571.96 → round off +₹0.04 → **₹2,48,572**.
 
 - Payments are stored as the **rupee amount received** (with method, date and reference) and are **append-only**: the database rejects edits and deletes.
 - Gold rates are **dated and never overwritten** — an order is priced with the rate effective on its order date.

@@ -117,7 +117,7 @@ function previewOrder(input) {
       available: r.product.available_quantity, shortage: r.product.available_quantity < r.demand,
       ...p.lines[i],
     })),
-    totals: { gold_value: p.gold_value, making_charge: p.making_charge, other_charges: p.other_charges, gst: p.gst, total: p.total },
+    totals: { gold_value: p.gold_value, making_charge: p.making_charge, other_charges: p.other_charges, gst: p.gst, round_off: p.round_off, total: p.total },
   };
 }
 
@@ -182,10 +182,10 @@ function createOrder(input, kind = 'ORDER') {
     const now = clock.timestamp();
     const res = q.run(
       `INSERT INTO orders (order_number, customer_id, kind, status, order_date, expected_delivery_date, order_gold_rate,
-         subtotal, making_charge, gst, gst_rate, other_charges, other_charges_note, total_amount, outstanding_amount, notes, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         subtotal, making_charge, gst, gst_rate, other_charges, other_charges_note, round_off, total_amount, outstanding_amount, notes, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       nextOrderNumber(), customerId, kind, 'PLACED', orderDate, expected, primaryRate,
-      p.gold_value, p.making_charge, p.gst, quote.gstRate, p.other_charges, str(input.other_charges_note), p.total, p.total,
+      p.gold_value, p.making_charge, p.gst, quote.gstRate, p.other_charges, str(input.other_charges_note), p.round_off, p.total, p.total,
       str(input.notes), now, now);
     const orderId = Number(res.lastInsertRowid);
     quote.rows.forEach((row, i) => insertItem(orderId, row, p.lines[i]));
@@ -391,6 +391,7 @@ function priceBreakdown(order, items) {
     other_charges: order.other_charges,
     other_charges_note: order.other_charges_note,
     gst: order.gst,
+    round_off: order.round_off,
     total: order.total_amount,
     lines: items.map((it) => ({
       item_id: it.id, name: it.product_name, quantity: it.quantity, purity: it.purity, net_weight: lineNetWeight(it),

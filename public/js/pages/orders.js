@@ -1,6 +1,6 @@
 import {
   $, $$, api, html, mount, inr, inr2, grams, perGram, fmtDate, fmtDateTime, relDays, deliveryNote, addDaysIso, todayIso, statusBadge, paymentBadge,
-  moveBadge, empty, openModal, onSubmit, toast, navigate, refresh, debounce, initials, slugify, icon, STATUS_FLOW, statusLabel,
+  moveBadge, roundOffText, empty, openModal, onSubmit, toast, navigate, refresh, debounce, initials, slugify, icon, STATUS_FLOW, statusLabel,
 } from '../lib.js';
 import { openProductDetail } from './catalog.js';
 const METHODS = ['Cash', 'UPI', 'Card', 'Bank Transfer', 'Other'];
@@ -430,8 +430,9 @@ function newTransactionPage(mode) {
         <div class="kv"><span class="k">Making charge</span><span class="v">${inr(t.making_charge)}</span></div>
         <div class="kv"><span class="k">GST @ ${p.gst_rate}%</span><span class="v">${inr(t.gst)}</span></div>
         ${t.other_charges ? html`<div class="kv"><span class="k">Other charges</span><span class="v">${inr(t.other_charges)}</span></div>` : ''}
+        ${t.round_off ? html`<div class="kv"><span class="k">Round off</span><span class="v">${roundOffText(t.round_off)}</span></div>` : ''}
         <div class="kv total"><span class="k">Total</span><span class="v">${inr(t.total)}</span></div>
-        <div class="muted small" style="margin-top:8px">Total = gold + making + GST on both${t.other_charges ? ' + other charges' : ''}. ${isSale ? '' : 'The price is locked when the order is placed.'}</div>
+        <div class="muted small" style="margin-top:8px">Total = gold + making + GST on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. ${isSale ? '' : 'The price is locked when the order is placed.'}</div>
         ${p.lines.some((l) => l.shortage) ? html`<div class="notice warn" style="margin-top:10px">Not enough stock for one of the items. Restock it in Inventory first.</div>` : ''}`);
       $$('[data-view-product]', figures).forEach((b) => b.addEventListener('click', () => openProductDetail(Number(b.dataset.viewProduct))));
       updateBalance();
@@ -506,10 +507,11 @@ function newTransactionPage(mode) {
             ${t.other_charges ? html`<div class="kv"><span class="k">Other charges${otherNote ? ` (${otherNote})` : ''}</span><span class="v">${inr2(t.other_charges)}</span></div>` : ''}
             <div class="kv"><span class="k">CGST @ ${p.gst_rate / 2}%</span><span class="v">${inr2(cgst)}</span></div>
             <div class="kv"><span class="k">SGST @ ${p.gst_rate / 2}%</span><span class="v">${inr2(t.gst - cgst)}</span></div>
+            ${t.round_off ? html`<div class="kv"><span class="k">Round off</span><span class="v">${roundOffText(t.round_off)}</span></div>` : ''}
             <div class="inv-total"><span>Total amount</span><span>${inr2(t.total)}</span></div>
           </div>
         </div>
-        <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${p.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}. ${isSale ? '' : 'The gold rate is fixed on the order date.'}</p>
+        <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${p.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. ${isSale ? '' : 'The gold rate is fixed on the order date.'}</p>
       </article>`;
 
       const slipView = () => html`<article class="invoice">
@@ -526,6 +528,7 @@ function newTransactionPage(mode) {
             <div class="kv"><span class="k">Making charges</span><span class="v">${inr2(t.making_charge)}</span></div>
             <div class="kv"><span class="k">GST @ ${p.gst_rate}%</span><span class="v">${inr2(t.gst)}</span></div>
             ${t.other_charges ? html`<div class="kv"><span class="k">Other charges</span><span class="v">${inr2(t.other_charges)}</span></div>` : ''}
+            ${t.round_off ? html`<div class="kv"><span class="k">Round off</span><span class="v">${roundOffText(t.round_off)}</span></div>` : ''}
             <div class="inv-total"><span>Total</span><span>${inr2(t.total)}</span></div></div>
         </div>
         <div class="inv-foot"><div class="inv-small" style="margin:0;max-width:430px">Internal order slip for workshop and delivery use. Deliberately excludes customer name, address and phone number.</div></div>
@@ -689,6 +692,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
           ${kv(`Making: ${grams(l.net_weight)} × ${perGram(l.making_rate)}`, inr(l.making_charge), 'sub')}
           ${kv(`GST @ ${price.gst_rate}%`, inr(l.gst), 'sub')}</div>`)}
         ${price.other_charges ? kv(`Other charges${price.other_charges_note ? ` (${price.other_charges_note})` : ''}`, inr(price.other_charges)) : ''}
+        ${price.round_off ? kv('Round off', roundOffText(price.round_off)) : ''}
         ${kv('Order total', inr(price.total), 'total')}
         ${kv('Paid', '− ' + inr(o.paid_amount), 'credit')}
         ${o.status === 'CANCELLED' ? '' : kv('Balance due', inr(o.outstanding_amount), `due ${o.outstanding_amount <= 0.005 ? 'zero' : ''}`)}
@@ -892,6 +896,7 @@ export async function orderSlipPage({ el, params, isCurrent }) {
           <div class="kv"><span class="k">Making charges</span><span class="v">${inr2(price.making_charge)}</span></div>
           <div class="kv"><span class="k">GST @ ${price.gst_rate}%</span><span class="v">${inr2(price.gst)}</span></div>
           ${price.other_charges ? html`<div class="kv"><span class="k">Other charges</span><span class="v">${inr2(price.other_charges)}</span></div>` : ''}
+          ${price.round_off ? html`<div class="kv"><span class="k">Round off</span><span class="v">${roundOffText(price.round_off)}</span></div>` : ''}
           <div class="inv-total"><span>Order total</span><span>${inr2(o.total_amount)}</span></div>
         </div>
       </div>

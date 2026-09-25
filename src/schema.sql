@@ -104,6 +104,7 @@ CREATE TABLE IF NOT EXISTS orders (
   gst_rate               REAL NOT NULL DEFAULT 3,
   other_charges          REAL NOT NULL DEFAULT 0,
   other_charges_note     TEXT,
+  round_off              REAL NOT NULL DEFAULT 0,      -- total rounded to the nearest rupee: total = gold + making + gst + other + round_off
   total_amount           REAL NOT NULL DEFAULT 0,
   paid_amount            REAL NOT NULL DEFAULT 0,      -- actual money received
   outstanding_amount     REAL NOT NULL DEFAULT 0,

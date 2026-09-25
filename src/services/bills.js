@@ -47,7 +47,7 @@ function buildSnapshot(order, billNumber, billDate) {
     })),
     totals: {
       gold_value: order.subtotal, making_charge: order.making_charge, other_charges: order.other_charges, other_charges_note: order.other_charges_note,
-      gst_rate: order.gst_rate, gst: order.gst, cgst, sgst: round2(order.gst - cgst),
+      gst_rate: order.gst_rate, gst: order.gst, cgst, sgst: round2(order.gst - cgst), round_off: order.round_off,
       total: order.total_amount, amount_in_words: amountInWords(order.total_amount),
     },
     payments: payments.map((p, i) => ({ date: p.payment_date, method: p.payment_method, amount: p.amount, reference: p.reference_number, kind: kinds[i] })),

@@ -1,5 +1,5 @@
 import {
-  $, api, html, mount, inr, inr2, grams, perGram, fmtDate, empty, toast, debounce, icon,
+  $, api, html, mount, inr, inr2, grams, perGram, fmtDate, roundOffText, empty, toast, debounce, icon,
 } from '../lib.js';
 
 // ================================================================== billing home
@@ -105,12 +105,13 @@ export async function billViewPage({ el, params, isCurrent }) {
           <div class="kv"><span class="k">Other charges${t.other_charges_note ? ` (${t.other_charges_note})` : ''}</span><span class="v">${inr2(t.other_charges)}</span></div>
           <div class="kv"><span class="k">CGST @ ${t.gst_rate / 2}%</span><span class="v">${inr2(t.cgst)}</span></div>
           <div class="kv"><span class="k">SGST @ ${t.gst_rate / 2}%</span><span class="v">${inr2(t.sgst)}</span></div>
+          ${t.round_off ? html`<div class="kv"><span class="k">Round off</span><span class="v">${roundOffText(t.round_off)}</span></div>` : ''}
                     <div class="inv-total"><span>Total amount</span><span>${inr2(t.total)}</span></div>
           <div class="inv-words">${t.amount_in_words}</div>
         </div>
       </div>
 
-      <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${t.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}. The gold rate is fixed on the order date.</p>
+      <p class="inv-small"><b>How the total is worked out:</b> gold value (net weight × gold rate) + making charge (net weight × making rate) + GST @ ${t.gst_rate}% on both${t.other_charges ? ' + other charges' : ''}, rounded to the nearest rupee. The gold rate is fixed on the order date.</p>
       <div class="inv-foot">
         <div class="inv-small" style="margin:0;max-width:430px">Goods once sold are subject to the shop's exchange policy. Please retain this bill and the hallmark certificate. This is a computer-generated final bill for order ${b.order_number}.</div>
         <div class="sign">Authorised signatory<br><span class="muted">${b.shop.name}</span></div>

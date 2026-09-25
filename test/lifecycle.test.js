@@ -35,6 +35,25 @@ test('price formula: gold + making + GST on both, rounded to the rupee', () => {
   assert.equal(withOther.total, 160871);
 });
 
+test('amounts keep their paise; only the grand total is rounded and the round-off is its own line', () => {
+  // 15.6 g bracelet: 15.6 × ₹14,720 = 229,632 · 15.6 × ₹750 = 11,700 · GST 3% of 241,332 = 7,239.96
+  const p = pricing.priceOrder({ items: [{ net_weight: 15.6, making_rate: 750, rate: 14720 }], otherCharges: 0, gstRate: 3 });
+  assert.equal(p.gold_value, 229632);
+  assert.equal(p.making_charge, 11700);
+  assert.equal(p.gst, 7239.96, 'GST is not rounded to the rupee');
+  assert.equal(p.round_off, 0.04);
+  assert.equal(p.total, 248572);
+  assert.equal(p.total, Math.round((p.gold_value + p.making_charge + p.gst + p.other_charges + p.round_off) * 100) / 100);
+
+  // rounding down gives a negative round-off; an exact total has none
+  const down = pricing.priceOrder({ items: [{ net_weight: 2.35, making_rate: 1050, rate: 14720 }], otherCharges: 0, gstRate: 3 });
+  assert.equal(down.making_charge, 2467.5);
+  assert.equal(down.gst, 1111.79);
+  assert.equal(down.round_off, -0.29);
+  assert.equal(down.total, 38171);
+  assert.equal(pricing.priceOrder({ items: [{ net_weight: 10, making_rate: 850, rate: 14720 }], gstRate: 3 }).round_off, 0);
+});
+
 test('net gold weight is derived from gross - stone, never stored by hand', () => {
   const ring = product("Men's Gold Ring");
   assert.equal(ring.gross_weight, 10.25);
@@ -296,7 +315,7 @@ test('GST is the one pricing setting and it applies to new orders only', () => {
   const chain = product('Rope Chain');
   const preview = orders.previewOrder({ items: [{ product_id: chain.id }] });
   assert.equal(preview.gst_rate, 5);
-  assert.equal(preview.totals.gst, Math.round((preview.totals.gold_value + preview.totals.making_charge) * 0.05));
+  assert.equal(preview.totals.gst, Math.round((preview.totals.gold_value + preview.totals.making_charge) * 5) / 100);
   assert.equal(rahulOrder().order.total_amount, existing.total_amount, 'a placed order keeps the GST it was priced with');
   assert.throws(() => market.updateSettings({ gst_rate: 90 }), /at most/);
   assert.throws(() => market.updateSettings({ making_charge_method: 'per_gram' }), /Unknown setting/);
@@ -315,4 +334,22 @@ test('new customers can be created inline and phone numbers stay unique', () => 
 test('clock override is reset after seeding', () => {
   const today = new Date();
   assert.equal(clock.now().getDate(), today.getDate());
+});
+
+test('the round-off is stored on the order and printed on the bill', () => {
+  const bracelet = product("Men's Bracelet"); // 15.6 g, ₹750/g
+  const buyer = customers.findByPhone('9433012345');
+  const o = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: bracelet.id, gold_rate: 14720 }] }); // rate pinned: earlier tests move the market
+  assert.equal(o.order.gst, 7239.96);
+  assert.equal(o.order.round_off, 0.04);
+  assert.equal(o.order.total_amount, 248572);
+  assert.equal(o.price.round_off, 0.04);
+  assert.equal(o.order.outstanding_amount, 248572, 'the customer owes the rounded total');
+  orders.acceptOrder(o.order.id);
+  const done = orders.deliver(o.order.id, { payment: { amount: 248572, payment_method: 'Cash' } });
+  const b = bills.get(done.bill.id).bill.totals;
+  assert.equal(b.round_off, 0.04);
+  assert.equal(b.gst, 7239.96);
+  assert.equal(b.total, 248572);
+  assert.equal(b.cgst + b.sgst, 7239.96);
 });

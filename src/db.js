@@ -59,6 +59,8 @@ function migrate() {
   db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   const customerCols = db.prepare("PRAGMA table_info(customers)").all().map((c) => c.name);
   if (!customerCols.includes('is_premium')) db.exec('ALTER TABLE customers ADD COLUMN is_premium INTEGER NOT NULL DEFAULT 0');
+  const orderCols = db.prepare("PRAGMA table_info(orders)").all().map((c) => c.name);
+  if (!orderCols.includes('round_off')) db.exec('ALTER TABLE orders ADD COLUMN round_off REAL NOT NULL DEFAULT 0');
   const itemCols = db.prepare("PRAGMA table_info(order_items)").all().map((c) => c.name);
   if (!itemCols.includes('description')) db.exec('ALTER TABLE order_items ADD COLUMN description TEXT');
   const productCols = db.prepare("PRAGMA table_info(products)").all().map((c) => c.name);

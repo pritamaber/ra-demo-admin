@@ -31,7 +31,8 @@ export async function settingsPage({ el, isCurrent }) {
           <div class="kv"><span class="k">Making charge</span><span class="v">net weight (g) × the product's making rate (₹/g)</span></div>
           <div class="kv"><span class="k">GST</span><span class="v">GST % × (gold value + making charge)</span></div>
           <div class="kv"><span class="k">Other charges</span><span class="v">optional flat amount per order (no GST)</span></div>
-          <div class="kv total"><span class="k">Total</span><span class="v">gold + making + GST + other charges</span></div>
+          <div class="kv"><span class="k">Round off</span><span class="v">the total is rounded to the nearest rupee; the difference is shown as its own line</span></div>
+          <div class="kv total"><span class="k">Total</span><span class="v">gold + making + GST + other charges ± round off</span></div>
         </div>
         <div class="form-grid">${group('pricing').map((d) => field(d, values[d.key]))}</div>
         <div class="hint" style="margin-top:8px">A new GST rate applies to orders placed from now on.</div>

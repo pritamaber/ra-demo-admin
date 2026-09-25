@@ -45,6 +45,8 @@ api.del = (url) => api('DELETE', url);
 const inrFmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
 const inrFmt2 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 export const inr = (n) => (n == null || Number.isNaN(n) ? '—' : (n < 0 ? '-₹' : '₹') + inrFmt.format(Math.abs(n)));
+/** "+₹0.04" / "−₹0.29": the rounding applied to a total, always with its sign. */
+export const roundOffText = (n) => `${n > 0 ? '+' : '−'}₹${Math.abs(n).toFixed(2)}`;
 export const inr2 = (n) => (n == null ? '—' : (n < 0 ? '-₹' : '₹') + inrFmt2.format(Math.abs(n)));
 export const grams = (n, dp = 3) => (n == null ? '—' : Number(n).toFixed(dp) + ' g');
 export const perGram = (n) => (n == null ? '—' : inr(n) + '/g');
