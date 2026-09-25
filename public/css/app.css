@@ -505,8 +505,10 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
   form.row input, form.row .btn { flex: 1 1 100%; width: 100% !important; }
   .chips { gap: 8px; }
   .chip { padding: 8px 13px; min-height: 38px; }
-  .tabs { margin: 0 -12px 14px; padding: 0 12px; scrollbar-width: none; }
-  .tabs::-webkit-scrollbar { display: none; }
+  .tabs { flex-wrap: wrap; gap: 8px; border-bottom: 0; overflow: visible; margin: 0 0 14px; padding: 0; }
+  .tab { flex: 1 1 auto; text-align: center; padding: 9px 14px; margin: 0; border: 1px solid var(--line); border-radius: 20px; background: #fff; }
+  .tab.on { background: var(--maroon); border-color: var(--maroon); color: #fff; }
+  .tab.on .n { background: rgba(255, 255, 255, .25); color: #fff; }
   [style*="max-width"] { max-width: 100% !important; }
   [style*="min-width:180px"] { min-width: 0 !important; }
 
