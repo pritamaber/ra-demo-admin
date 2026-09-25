@@ -639,6 +639,18 @@ function nextStepText(o) {
   }
 }
 
+/** One plain sentence: did the bill move since the order day, and why? (null when it did not) */
+function movementNote(sm) {
+  const e = sm.effect;
+  if (Math.abs(e.total) < 0.5) return null;
+  const more = e.total > 0;
+  const size = inr(Math.abs(e.total));
+  const why = Math.abs(e.rate_change) > 0.005
+    ? `the gold price went ${e.rate_change > 0 ? 'up' : 'down'} ${inr(Math.abs(e.rate_change))} per gram`
+    : 'the making charge was agreed differently';
+  return { cls: more ? 'gp-worse' : 'gp-good', text: `${size} ${more ? 'more' : 'less'} than on the order day — ${why}` };
+}
+
 export async function orderDetailPage({ el, params, isCurrent }) {
   const id = params[0];
   const data = await api.get(`/api/orders/${id}`);
@@ -690,18 +702,45 @@ export async function orderDetailPage({ el, params, isCurrent }) {
 
     <div class="card">
       <div class="card-head"><h2>Items</h2></div>
-      <div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th>SKU · Barcode</th><th>Purity</th><th class="num">Qty</th><th class="num">Gross</th><th class="num">Stone</th><th class="num">Net gold</th></tr></thead>
+      <div class="table-wrap"><table class="tbl"><thead><tr><th>Product</th><th class="ph-hide">SKU · Barcode</th><th>Purity</th><th class="num">Qty</th><th class="num ph-hide">Gross</th><th class="num ph-hide">Stone</th><th class="num">Net gold</th></tr></thead>
         <tbody>${items.map((i) => html`<tr>
           <td><div class="prod-cell"><img class="thumb" src="${i.image}" alt=""><div><button type="button" class="link-btn cell-main" data-view-product="${i.product_id}">${i.product_name}</button>${i.description ? html`<div class="cell-sub">${i.description}</div>` : ''}</div></div></td>
-          <td><span class="mono">${i.sku}</span><div class="cell-sub mono">${i.barcode || ''}</div></td>
+          <td class="ph-hide"><span class="mono">${i.sku}</span><div class="cell-sub mono">${i.barcode || ''}</div></td>
           <td>${i.purity} ${i.metal_type}</td><td class="num">${i.quantity}</td>
-          <td class="num">${grams(i.gross_weight * i.quantity)}</td><td class="num">${grams(i.stone_weight * i.quantity)}</td>
+          <td class="num ph-hide">${grams(i.gross_weight * i.quantity)}</td><td class="num ph-hide">${grams(i.stone_weight * i.quantity)}</td>
           <td class="num bold">${grams(i.net_weight_total)}</td></tr>`)}</tbody></table></div>
     </div>
 
-    <div class="card" style="margin-top:18px">
-      <div class="card-head"><h2>Your bill, step by step</h2><span class="muted small">Gold you have paid for stays at that day's price · gold still to pay is counted at today's price</span></div>
-      <div class="card-body gp">
+    ${(() => {
+      const move = movementNote(sm);
+      const paidShare = sm.net_weight > 0 ? Math.min(100, Math.round((sm.gold_paid_grams / sm.net_weight) * 100)) : 0;
+      const finalLabel = sm.is_final ? 'Final bill' : 'Total bill';
+      return html`<div class="card" style="margin-top:18px">
+      <div class="card-head"><h2>Bill</h2></div>
+      <div class="card-body bs">
+        <div class="gold-meter">
+          <div class="gm-top"><span>Gold ordered</span><b>${grams(sm.net_weight)}</b></div>
+          <div class="gm-bar" role="img" aria-label="${paidShare}% of the gold is paid for"><span style="width:${paidShare}%"></span></div>
+          ${sm.gold_remaining_grams > 0.0005
+            ? html`<div class="gm-legend"><span><i class="dot paid"></i>Paid for <b>${grams(sm.gold_paid_grams)}</b></span><span><i class="dot left"></i>Still to pay <b>${grams(sm.gold_remaining_grams)}</b></span></div>
+              <div class="gm-note">${grams(sm.gold_remaining_grams)} is ${inr(sm.remaining.gold_value)} at today's gold price (${perGram(sm.gold_rate_today)})</div>`
+            : html`<div class="gm-legend"><span class="gp-good"><b>✓ All the gold is paid for</b></span></div>`}
+        </div>
+
+        <div class="bs-row"><span>Gold</span><b>${inr(sm.gold_value)}</b></div>
+        <div class="bs-row"><span>Making charge${sm.booked.making_charge - sm.making_charge > 0.005 ? html` <small>(quoted ${inr(sm.booked.making_charge)})</small>` : ''}</span><b>${inr(sm.making_charge)}</b></div>
+        <div class="bs-row"><span>GST (${price.gst_rate}%)</span><b>${inr(sm.gst)}</b></div>
+        ${sm.other_charges ? html`<div class="bs-row"><span>Other charges</span><b>${inr(sm.other_charges)}</b></div>` : ''}
+        ${sm.round_off ? html`<div class="bs-row"><span>Round off</span><b>${roundOffText(sm.round_off)}</b></div>` : ''}
+        <div class="bs-row bs-total"><span>${finalLabel}</span><b>${inr(sm.total)}</b></div>
+        ${move ? html`<div class="bs-note ${move.cls}">${move.text}</div>` : ''}
+        <div class="bs-row"><span>Paid</span><b class="gp-good">${inr(sm.paid)}</b></div>
+        ${o.status === 'CANCELLED' ? '' : o.outstanding_amount <= 0.005
+          ? html`<div class="gp-clear">✓ All payments clear</div>`
+          : html`<div class="bs-row bs-balance"><span>Balance to pay</span><b>${inr(o.outstanding_amount)}</b></div>`}
+      </div>
+      <details class="how"><summary>How was this worked out?</summary>
+        <div class="gp">
         <section class="gp-step">
           <div class="gp-head"><span class="gp-num">1</span>On the order day, ${fmtDate(o.order_date)} <span class="muted">— gold was ${perGram(sm.booked.gold_rate)}</span></div>
           <div class="gp-row"><span>Gold <small>${grams(sm.net_weight)} × ${perGram(sm.booked.gold_rate)}</small></span><b>${inr(sm.booked.gold_value)}</b></div>
@@ -763,15 +802,22 @@ export async function orderDetailPage({ el, params, isCurrent }) {
           ].filter(Boolean).join(' + ')}${Math.abs(sm.remaining.round_off) > 0.005 ? ` (round off ${roundOffText(sm.remaining.round_off)})` : ''}.</div>` : ''}
         </section>
       </div>
-    </div>
+      </details>
+    </div>`;
+    })()}
 
     <div class="card" style="margin-top:18px">
-      <div class="card-head"><h2>Payments</h2><div class="row"><span class="muted small">Records are never edited or removed.</span>${payments.length ? html`<a class="btn btn-sm" href="#/orders/${o.id}/statement">${icon('print')} Payment statement</a>` : ''}</div></div>
-      ${payments.length ? html`<div class="table-wrap"><table class="tbl"><thead><tr><th>Payment</th><th>Date</th><th>Type</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th class="num">Gold rate</th><th class="num">Gold bought</th><th>Notes</th></tr></thead>
-        <tbody>${payments.map((p) => html`<tr><td class="mono">PAY-${String(p.id).padStart(4, '0')}</td><td class="nowrap">${fmtDate(p.payment_date)}</td><td>${p.kind}</td><td>${p.payment_method}</td>
-          <td class="mono">${p.reference_number || '—'}</td><td class="num bold">${inr(p.amount)}</td>
-          <td class="num">${p.gold_rate ? perGram(p.gold_rate) : '—'}</td><td class="num">${p.gold_grams > 0 ? grams(p.gold_grams) : '—'}</td><td>${p.notes || ''}</td></tr>`)}</tbody>
-        <tfoot><tr><td colspan="5">Total paid</td><td class="num">${inr(o.paid_amount)}</td><td></td><td class="num">${grams(sm.gold_paid_grams)}</td><td></td></tr></tfoot></table></div>` : empty('No payments recorded yet')}
+      <div class="card-head"><h2>Payments</h2>${payments.length ? html`<a class="btn btn-sm" href="#/orders/${o.id}/statement">${icon('print')} Payment statement</a>` : ''}</div>
+      ${payments.length ? html`<div class="pay-list">
+        ${payments.map((p) => html`<div class="pay-row">
+          <div class="pay-main"><b>${fmtDate(p.payment_date, false)}</b><span class="muted"> · ${p.kind} · ${p.payment_method}</span>${p.reference_number ? html`<span class="muted small"> · ${p.reference_number}</span>` : ''}</div>
+          <b class="pay-amt">${inr(p.amount)}</b>
+          <div class="pay-sub">${p.gold_grams > 0
+            ? `Bought ${grams(p.gold_grams)} of gold at ${perGram(p.gold_rate)}${p.amount - p.gold_amount > 0.005 ? ` · ${inr(p.amount - p.gold_amount)} went to making charge & GST` : ''}`
+            : 'Went to making charge & GST'}${p.notes ? ` · ${p.notes}` : ''}</div>
+        </div>`)}
+        <div class="pay-row pay-total"><div class="pay-main"><b>Total paid</b>${sm.gold_paid_grams > 0 ? html`<span class="muted"> · ${grams(sm.gold_paid_grams)} of gold</span>` : ''}</div><b class="pay-amt">${inr(o.paid_amount)}</b></div>
+      </div>` : empty('No payments recorded yet')}
     </div>
 
     <div class="grid cols-2" style="margin-top:18px">
