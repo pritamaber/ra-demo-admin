@@ -78,15 +78,19 @@ function settle({ netWeight, goldValueToday, makingCharge, otherCharges, gstRate
   const otherPaid = Math.min(round2(beyondGold - makingPaid), otherCharges);
   const gstPaid = Math.min(round2(beyondGold - makingPaid - otherPaid), gst);
 
+  const outstanding = Math.max(round2(total - paid), 0);
+  const nothingDue = outstanding < 0.005 && remainingFraction === 0;
   return {
-    remaining: {
-      gold_grams: round3(remainingFraction * netWeight),
-      gold_value: remainingGoldValue,
-      making_charge: round2(makingCharge - makingPaid),
-      other_charges: round2(otherCharges - otherPaid),
-      gst: round2(gst - gstPaid),
-      round_off: round2(total - before),
-    },
+    remaining: nothingDue
+      ? { gold_grams: 0, gold_value: 0, making_charge: 0, other_charges: 0, gst: 0, round_off: 0 }
+      : {
+        gold_grams: round3(remainingFraction * netWeight),
+        gold_value: remainingGoldValue,
+        making_charge: round2(makingCharge - makingPaid),
+        other_charges: round2(otherCharges - otherPaid),
+        gst: round2(gst - gstPaid),
+        round_off: round2(total - before),
+      },
     net_weight: netWeight,
     gold_paid_fraction: paidFraction,
     gold_paid_grams: round3(paidFraction * netWeight),
@@ -97,7 +101,7 @@ function settle({ netWeight, goldValueToday, makingCharge, otherCharges, gstRate
     gold_value, making_charge: makingCharge, other_charges: otherCharges, gst,
     round_off: round2(total - before), total,
     paid,
-    outstanding: Math.max(round2(total - paid), 0),
+    outstanding,
     excess: Math.max(round2(paid - total), 0),
   };
 }

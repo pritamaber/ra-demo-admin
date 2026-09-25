@@ -383,6 +383,9 @@ textarea { resize: vertical; min-height: 60px; }
 .gp-final .gp-note { padding-left: 0; }
 .gp-final .gp-row.total { margin: 8px -8px 2px; padding: 10px 8px; border-radius: 8px; background: var(--maroon-soft); font-size: 16px; }
 .gp-final .gp-row.total b { color: var(--maroon); font-size: 19px; }
+.gp-clear { margin: 6px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--green-soft); color: var(--green); font-weight: 700; font-size: 16px; text-align: center; }
+.kpi.clear { background: var(--green-soft); border-color: #bfe0cb; }
+.kpi.clear .kpi-value { color: var(--green); font-size: 17px; margin-top: 6px; }
 .gp-final .gp-row.total.zero { background: var(--green-soft); }
 .gp-final .gp-row.total.zero b { color: var(--green); }
 .breakup { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: #fffdf8; }

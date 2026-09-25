@@ -680,8 +680,10 @@ export async function orderDetailPage({ el, params, isCurrent }) {
     <div class="kpis order-kpis" style="margin-top:18px">
       <div class="kpi"><div class="kpi-label">Order total</div><div class="kpi-value">${inr(o.total_amount)}</div><div class="kpi-note">${sm.total_change ? `booked at ${inr(sm.booked.total)}` : `at ${perGram(sm.booked.gold_rate)} on ${fmtDate(o.order_date, false)}`}</div></div>
       <div class="kpi"><div class="kpi-label">Paid so far</div><div class="kpi-value" style="color:var(--green)">${inr(o.paid_amount)}</div><div class="kpi-note">${payments.length} payment${payments.length === 1 ? '' : 's'}</div></div>
-      <div class="kpi ${o.outstanding_amount > 0 ? 'hero' : ''}"><div class="kpi-label">Balance due</div><div class="kpi-value">${inr(o.outstanding_amount)}</div>
-        <div class="kpi-note">${o.status === 'CANCELLED' ? 'cancelled' : o.outstanding_amount > 0 ? paymentBadge(o.payment_status) : 'Paid in full ✓'}</div></div>
+      ${o.status !== 'CANCELLED' && o.outstanding_amount <= 0.005
+        ? html`<div class="kpi clear"><div class="kpi-label">Balance</div><div class="kpi-value">✓ All payments clear</div><div class="kpi-note">nothing more to pay</div></div>`
+        : html`<div class="kpi ${o.outstanding_amount > 0 ? 'hero' : ''}"><div class="kpi-label">Balance due</div><div class="kpi-value">${inr(o.outstanding_amount)}</div>
+        <div class="kpi-note">${o.status === 'CANCELLED' ? 'cancelled' : paymentBadge(o.payment_status)}</div></div>`}
       <div class="kpi"><div class="kpi-label">${o.actual_delivery_date ? 'Delivered on' : 'Delivery date'}</div><div class="kpi-value" style="font-size:19px">${fmtDate(o.actual_delivery_date || o.expected_delivery_date)}</div>
         <div class="kpi-note">${deliveryNote(o)}</div></div>
     </div>
@@ -750,7 +752,9 @@ export async function orderDetailPage({ el, params, isCurrent }) {
         <section class="gp-step gp-final">
           <div class="gp-row"><span>${sm.is_final ? 'Final bill' : 'Bill now'}</span><b>${inr(sm.total)}</b></div>
           <div class="gp-row"><span>Paid so far</span><b class="gp-good">− ${inr(sm.paid)}</b></div>
-          ${o.status === 'CANCELLED' ? '' : html`<div class="gp-row total ${o.outstanding_amount <= 0.005 ? 'zero' : ''}"><span>Balance to pay</span><b>${inr(o.outstanding_amount)}</b></div>`}
+          ${o.status === 'CANCELLED' ? '' : o.outstanding_amount <= 0.005
+            ? html`<div class="gp-clear">✓ All payments clear</div>`
+            : html`<div class="gp-row total"><span>Balance to pay</span><b>${inr(o.outstanding_amount)}</b></div>`}
           ${o.outstanding_amount > 0.005 && o.status !== 'CANCELLED' ? html`<div class="gp-note">That is ${[
             sm.remaining.gold_grams > 0.0005 ? `gold ${inr(sm.remaining.gold_value)}` : '',
             sm.remaining.making_charge > 0.005 ? `making ${inr(sm.remaining.making_charge)}` : '',
@@ -928,6 +932,24 @@ function openPaymentModal(data) {
 
 function openDeliverModal(data) {
   const { order: o, settlement: s0 } = data;
+  if (s0.outstanding <= 0.005) { // nothing due: no breakup, no payment fields — just confirm
+    openModal({
+      title: `Deliver · ${o.order_number}`,
+      content: html`<form>
+        <div class="gp-clear">✓ All payments clear</div>
+        <p class="muted" style="margin-top:12px">Nothing more to collect. On confirmation the order becomes <b>Delivered</b>, stock is reduced and the final bill is generated automatically.</p>
+        <div class="form-error"></div>
+        <div class="modal-actions"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn-gold" type="submit">Confirm delivery</button></div>
+      </form>`,
+      onOpen: (m, close) => onSubmit($('form', m), async () => {
+        const res = await api.post(`/api/orders/${o.id}/deliver`, {});
+        close();
+        toast(`${o.order_number} delivered — final bill ${res.bill.bill_number} generated`);
+        refresh();
+      }),
+    });
+    return;
+  }
   openModal({
     title: `Deliver · ${o.order_number}`,
     size: 'wide',
