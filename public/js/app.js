@@ -1,9 +1,9 @@
-import { $, $$, api, html, raw, mount, icon, inr, debounce, navigate, toast } from './lib.js';
+import { $, $$, api, html, raw, openModal, mount, icon, inr, debounce, navigate, toast } from './lib.js';
 import { dashboardPage } from './pages/dashboard.js';
 import { ordersListPage, orderNewPage, orderDetailPage, orderSlipPage } from './pages/orders.js';
 import { billingPage, billViewPage } from './pages/billing.js';
 import { customersPage, customerProfilePage, openCustomerForm } from './pages/customers.js';
-import { catalogPage } from './pages/catalog.js';
+import { catalogPage, openProductForm } from './pages/catalog.js';
 import { inventoryPage } from './pages/inventory.js';
 import { goldRatePage } from './pages/goldrate.js';
 import { settingsPage } from './pages/settings.js';
@@ -77,10 +77,32 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setDrawer(
 window.addEventListener('hashchange', () => setDrawer(false));
 
 const svg = (d) => raw(`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`);
-const BOTTOM = [['dashboard', 'Home', '/dashboard'], ['orders', 'Orders', '/orders'], ['new', 'New', '/orders/new'], ['customers', 'Customers', '/customers']];
-mount($('#bottom-nav'), html`${BOTTOM.map(([ic, label, path]) => html`<a href="#${path}" data-path="${path}" class="${ic === 'new' ? 'bn-new' : ''}">${ic === 'new' ? svg('M12 5v14M5 12h14') : icon(ic, 22)}<span>${label}</span></a>`)}
+const BOTTOM = [['dashboard', 'Home', '/dashboard'], ['orders', 'Orders', '/orders'], ['new', 'New', ''], ['customers', 'Customers', '/customers']];
+mount($('#bottom-nav'), html`${BOTTOM.map(([ic, label, path]) => ic === 'new'
+  ? html`<button type="button" id="bn-new" class="bn-new" aria-haspopup="dialog">${svg('M12 5v14M5 12h14')}<span>${label}</span></button>`
+  : html`<a href="#${path}" data-path="${path}">${icon(ic, 22)}<span>${label}</span></a>`)}
   <button type="button" id="bn-more">${svg('M5 12h.01M12 12h.01M19 12h.01')}<span>More</span></button>`);
 $('#bn-more').addEventListener('click', () => setDrawer(true));
+
+// "+ New" opens a quick-create sheet.
+$('#bn-new').addEventListener('click', () => {
+  const { el, close } = openModal({
+    title: 'Create new',
+    content: html`<div class="quick-actions">
+      <a class="quick-action" href="#/orders/new" data-close><span class="qa-ic">${icon('orders', 22)}</span><span><b>New order</b><small>Start a sale for a customer</small></span></a>
+      <button type="button" class="quick-action" data-qa="customer"><span class="qa-ic">${icon('customers', 22)}</span><span><b>New customer</b><small>Add a customer profile</small></span></button>
+      <button type="button" class="quick-action" data-qa="product"><span class="qa-ic">${icon('catalog', 22)}</span><span><b>Add to master catalog</b><small>Add a new jewellery product</small></span></button>
+    </div>`,
+  });
+  el.querySelector('[data-qa="customer"]').onclick = () => { close(); openCustomerForm(); };
+  el.querySelector('[data-qa="product"]').onclick = async () => {
+    close();
+    try {
+      const [{ items: categories, purities }, settings] = await Promise.all([api.get('/api/categories'), api.get('/api/settings')]);
+      openProductForm({ categories, purities, makingMethod: settings.values.making_charge_method, onSaved: () => window.dispatchEvent(new Event('app:refresh')) });
+    } catch (err) { toast(err.message, 'error'); }
+  };
+});
 
 // Tables collapse into stacked cards on phones (CSS); label each cell from its column header.
 function labelCells(root) {

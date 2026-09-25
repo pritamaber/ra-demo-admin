@@ -415,6 +415,13 @@ body { overflow-x: hidden; }
 img { max-width: 100%; }
 button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 
+.quick-actions { display: grid; gap: 10px; }
+.quick-action { display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); font: inherit; text-align: left; cursor: pointer; text-decoration: none; }
+.quick-action:hover { border-color: var(--gold-2); background: var(--gold-soft); text-decoration: none; }
+.quick-action b { display: block; font-size: 15.5px; }
+.quick-action small { color: var(--muted); font-size: 12.5px; }
+.qa-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--maroon-soft); color: var(--maroon); display: grid; place-items: center; flex: none; }
+
 /* Large tablets / small laptops */
 @media (max-width: 1180px) {
   .split, .split-wide { grid-template-columns: minmax(0, 1fr); }
@@ -577,8 +584,8 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
   .bottom-nav { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(60, 40, 20, .08); padding-bottom: env(safe-area-inset-bottom); }
   .bottom-nav a, .bottom-nav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; padding: 6px 2px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; text-decoration: none; }
   .bottom-nav a.active { color: var(--maroon); }
-  .bottom-nav a.bn-new { color: var(--maroon); }
-  .bottom-nav a.bn-new svg { background: var(--maroon); color: #fff; border-radius: 50%; padding: 6px; width: 34px; height: 34px; margin-top: -14px; box-shadow: 0 3px 10px rgba(122, 31, 43, .4); }
+  .bottom-nav .bn-new { color: var(--maroon); }
+  .bottom-nav .bn-new svg { background: var(--maroon); color: #fff; border-radius: 50%; padding: 6px; width: 34px; height: 34px; margin-top: -14px; box-shadow: 0 3px 10px rgba(122, 31, 43, .4); }
 }
 
 /* very small phones */
