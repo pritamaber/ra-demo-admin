@@ -487,11 +487,11 @@ export async function orderDetailPage({ el, params, isCurrent }) {
 
     ${o.status === 'CANCELLED' ? html`<div class="notice warn" style="margin-top:16px"><b>Cancelled</b> ${fmtDate(o.cancelled_at)}${o.cancel_reason ? ' — ' + o.cancel_reason : ''}. Reserved stock was released.${o.paid_amount > 0 ? ` ${inr(o.paid_amount)} received earlier remains in the payment history below and needs to be refunded or adjusted.` : ''}</div>` :
       html`<div class="notice next-step" style="margin-top:16px">${nextStepText(o)}</div>
-      <div class="card card-body" style="margin-top:12px"><div class="flow">${STATUS_FLOW.map((k, i) => html`<div class="flow-step ${i < flowIdx ? 'done' : ''} ${i === flowIdx ? 'now' : ''}">${SHORT_STATUS[k] || statusLabel(k)}</div>`)}</div></div>`}
+      <div class="card card-body" style="margin-top:12px"><div class="flow">${STATUS_FLOW.map((k, i) => html`<div class="flow-step ${i < flowIdx ? 'done' : ''} ${i === flowIdx ? 'now' : ''}" data-label="Step ${i + 1} of ${STATUS_FLOW.length} · ${SHORT_STATUS[k] || statusLabel(k)}">${SHORT_STATUS[k] || statusLabel(k)}</div>`)}</div></div>`}
 
     ${o.is_credit ? html`<div class="notice warn" style="margin-top:16px"><b>Delivered on credit</b> — ${inr(o.outstanding_amount)} still owed${o.credit_due_date ? html`, repayment due ${fmtDate(o.credit_due_date)} (${relDays(o.days_to_credit_due)})` : ''}. The piece has already left the shop; record payments here as they come in.</div>` : ''}
 
-    <div class="kpis" style="margin-top:18px">
+    <div class="kpis order-kpis" style="margin-top:18px">
       <div class="kpi"><div class="kpi-label">${s.is_final ? 'Final bill amount' : 'Total bill amount'}</div><div class="kpi-value">${inr(o.total_amount)}</div>
         <div class="kpi-note">${o.total_amount === o.estimated_total ? `at ${perGram(d.gold_rate)}` : `was ${inr(o.estimated_total)} when booked — recalculated at today's ${perGram(d.gold_rate)}`}</div></div>
       <div class="kpi"><div class="kpi-label">Paid so far</div><div class="kpi-value" style="color:var(--green)">${inr(o.paid_amount)}</div><div class="kpi-note">${payments.length} payment${payments.length === 1 ? '' : 's'}</div></div>
