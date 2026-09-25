@@ -363,6 +363,18 @@ textarea { resize: vertical; min-height: 60px; }
 
 /* ------------------------------------------------------------ new order */
 .line-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 34px; gap: 10px; align-items: end; margin-bottom: 10px; }
+.menu-wrap { position: relative; }
+.menu-wrap > .btn { gap: 8px; }
+.menu { position: absolute; top: calc(100% + 6px); left: 0; min-width: 280px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 36px rgba(60, 40, 20, .2); padding: 6px; z-index: 40; animation: menu-in .12s ease-out; }
+.menu[hidden] { display: none; }
+.menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; padding: 10px 12px; border: 0; background: none; border-radius: 8px; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--gold-soft); outline: none; }
+.menu-item b { font-weight: 650; }
+.menu-item small { color: var(--muted); font-size: 12.5px; }
+.menu-item.danger b { color: var(--red); }
+.menu-item.danger:hover { background: var(--red-soft); }
+.menu-sep { height: 1px; background: var(--line-2); margin: 4px 6px; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(-4px); } }
 .line-card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; background: #fffdf8; }
 .line-card:last-child { margin-bottom: 0; }
 .line-card .line-row { margin-bottom: 0; }
@@ -586,6 +598,10 @@ select:disabled { background-color: var(--surface-2); color: var(--muted); }
   .order-title .badge { font-size: 11px; padding: 1px 8px; }
   .order-head .page-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
   .order-head .page-actions .btn { min-height: 42px; padding: 8px 10px; font-size: 14px; }
+  .order-head .page-actions .menu-wrap { grid-column: 1 / -1; order: -1; }
+  .order-head .page-actions .menu-wrap > .btn { width: 100%; min-height: 48px; font-size: 15px; }
+  .menu { left: 0; right: 0; min-width: 0; }
+  .menu-item { padding: 13px 14px; }
   .order-head .page-actions .btn-gold, .order-head .page-actions .btn-primary { grid-column: 1 / -1; order: -1; min-height: 48px; font-size: 15px; }
   .order-head .page-actions .btn-danger { grid-column: 1 / -1; min-height: 34px; border-color: transparent; background: none; font-size: 13px; }
   .notice.next-step { font-size: 14px; padding: 10px 12px; }

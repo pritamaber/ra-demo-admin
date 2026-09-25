@@ -569,6 +569,7 @@ export async function orderDetailPage({ el, params, isCurrent }) {
   const { order: o, customer: c, items, payments, price, events, stock_movements: moves, bill, actions } = data;
   const has = (a) => actions.includes(a);
   const flowIdx = STATUS_FLOW.indexOf(o.status);
+  const statusActions = ['accept', 'mark_ready', 'deliver', 'unmark_ready', 'cancel'].filter(has);
 
   mount(el, html`
     <div class="crumb"><a href="#/orders">Orders</a> / ${o.order_number}</div>
@@ -578,15 +579,20 @@ export async function orderDetailPage({ el, params, isCurrent }) {
         <div class="muted" style="margin-top:6px"><a href="#/customers/${c.id}" class="bold">${c.name}</a> · <a href="tel:${c.phone}">${c.phone}</a> · placed ${fmtDate(o.order_date)}</div>
       </div>
       <div class="page-actions">
-        ${has('accept') ? html`<button class="btn btn-primary" data-act="accept">Accept Order</button>` : ''}
-        ${has('mark_ready') ? html`<button class="btn btn-primary" data-act="ready">Mark Ready</button>` : ''}
-        ${has('deliver') ? html`<button class="btn ${o.status === 'READY' ? 'btn-gold' : ''}" data-act="deliver">Deliver</button>` : ''}
+        ${statusActions.length ? html`<div class="menu-wrap">
+          <button type="button" class="btn ${o.status === 'READY' ? 'btn-gold' : 'btn-primary'}" id="status-menu-btn" aria-haspopup="menu" aria-expanded="false">Update status
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="menu" id="status-menu" role="menu" hidden>
+            ${has('accept') ? html`<button type="button" class="menu-item" role="menuitem" data-act="accept"><b>Accept order</b><small>Confirm it with the customer</small></button>` : ''}
+            ${has('mark_ready') ? html`<button type="button" class="menu-item" role="menuitem" data-act="ready"><b>Mark ready for delivery</b><small>The piece is prepared</small></button>` : ''}
+            ${has('deliver') ? html`<button type="button" class="menu-item" role="menuitem" data-act="deliver"><b>Deliver</b><small>${o.outstanding_amount > 0.005 ? `Collect ${inr(o.outstanding_amount)} first, then hand over` : 'Hand over and create the final bill'}</small></button>` : ''}
+            ${has('unmark_ready') ? html`<button type="button" class="menu-item" role="menuitem" data-act="unready"><b>Undo ready</b><small>Move it back to Accepted</small></button>` : ''}
+            ${has('cancel') ? html`<div class="menu-sep"></div><button type="button" class="menu-item danger" role="menuitem" data-act="cancel"><b>Cancel order</b><small>Release the reserved stock</small></button>` : ''}
+          </div></div>` : ''}
         ${has('view_bill') && bill ? html`<a class="btn btn-primary" href="#/bills/${bill.id}">View Final Bill</a>` : ''}
         ${has('add_payment') ? html`<button class="btn" data-act="pay">Record Payment</button>` : ''}
-        ${has('unmark_ready') ? html`<button class="btn" data-act="unready">Undo Ready</button>` : ''}
         ${has('edit_delivery_date') ? html`<button class="btn" data-act="edit-delivery">Change Delivery Date</button>` : ''}
         <a class="btn" href="#/orders/${o.id}/slip">${icon('print')} Order Slip</a>
-        ${has('cancel') ? html`<button class="btn btn-danger" data-act="cancel">Cancel</button>` : ''}
       </div>
     </div>
 
@@ -650,6 +656,23 @@ export async function orderDetailPage({ el, params, isCurrent }) {
 
   // ---- actions
   const act = (name) => $(`[data-act=${name}]`, el);
+  // The status dropdown: a small custom menu that closes on choosing, clicking elsewhere or Escape.
+  const menuBtn = $('#status-menu-btn', el);
+  const menu = $('#status-menu', el);
+  if (menuBtn) {
+    const closeMenu = () => { menu.hidden = true; menuBtn.setAttribute('aria-expanded', 'false'); document.removeEventListener('click', outside); document.removeEventListener('keydown', onKey); };
+    const outside = (e) => { if (!e.target.closest('.menu-wrap')) closeMenu(); };
+    const onKey = (e) => { if (e.key === 'Escape') { closeMenu(); menuBtn.focus(); } };
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!menu.hidden) return closeMenu();
+      menu.hidden = false;
+      menuBtn.setAttribute('aria-expanded', 'true');
+      document.addEventListener('click', outside);
+      document.addEventListener('keydown', onKey);
+    });
+    menu.addEventListener('click', () => closeMenu());
+  }
   act('pay')?.addEventListener('click', () => openPaymentModal(data));
   act('deliver')?.addEventListener('click', () => openDeliverModal(data));
   act('accept')?.addEventListener('click', () => post(`/api/orders/${o.id}/accept`, {}, 'Order accepted'));
