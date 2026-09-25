@@ -480,6 +480,7 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
   .page-head > div:first-child { flex: 1 1 100%; }
   .page-actions { width: 100%; }
   .page-actions > .btn { flex: 1 1 auto; }
+  .dash-head .sub, .dash-head .page-actions { display: none; }
   .card + .card, .stack > * + * { margin-top: 14px; }
   .grid { gap: 14px; }
   .card-head { padding: 12px 14px; }

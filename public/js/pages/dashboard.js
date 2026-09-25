@@ -72,7 +72,7 @@ export async function dashboardPage({ el, isCurrent }) {
   const today = new Date(d.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   mount(el, html`
-    <div class="page-head">
+    <div class="page-head dash-head">
       <div><h1>Dashboard</h1><div class="sub">${today} — who has money pending, how much, and whom to contact.</div></div>
       <div class="page-actions"><a class="btn btn-primary" href="#/orders/new">+ New Order</a></div>
     </div>
