@@ -19,6 +19,14 @@ function nextBillNumber(date) {
   return prefix + pad(last ? Number(last.bill_number.slice(prefix.length)) + 1 : 1, 4);
 }
 
+/** "₹850/g × 15.600 g" — and, when the shopkeeper agreed a different amount, what was quoted vs agreed. */
+function makingNote(it) {
+  const net = round3(it.net_gold_weight * it.quantity);
+  const quoted = round2(it.making_rate * net);
+  const base = `${inr(it.making_rate)}/g × ${net.toFixed(3)} g`;
+  return Math.abs(quoted - it.making_charge) > 0.005 ? `${base} = ${inr(quoted)}, agreed ${inr(it.making_charge)}` : base;
+}
+
 function buildSnapshot(order, billNumber, billDate) {
   const items = orders.itemsOf(order.id);
   const payments = orders.paymentsOf(order.id);
@@ -26,6 +34,7 @@ function buildSnapshot(order, billNumber, billDate) {
   const customer = q.get('SELECT * FROM customers WHERE id = ?', order.customer_id);
   const s = settings.getAll();
   const cgst = round2(order.gst / 2);
+  const netWeight = round3(items.reduce((sum, it) => sum + it.net_gold_weight * it.quantity, 0));
 
   return {
     shop: { name: s.shop_name, tagline: s.shop_tagline, address: s.shop_address, phone: s.shop_phone, gstin: s.shop_gstin },
@@ -41,16 +50,21 @@ function buildSnapshot(order, billNumber, billDate) {
       name: it.product_name, description: it.description, sku: it.sku, barcode: it.barcode, metal_type: it.metal_type, purity: it.purity, quantity: it.quantity,
       gross_weight: round3(it.gross_weight * it.quantity), stone_weight: round3(it.stone_weight * it.quantity),
       net_gold_weight: round3(it.net_gold_weight * it.quantity),
-      gold_rate: it.gold_rate, gold_value: it.gold_value, making_charge: it.making_charge,
-      making_description: `${inr(it.making_rate)}/g × ${round3(it.net_gold_weight * it.quantity).toFixed(3)} g`,
-      gst: it.gst, total: it.total,
+      gold_rate: it.settled_gold_rate ?? it.gold_rate, gold_value: it.settled_gold_value ?? it.gold_value, making_charge: it.making_charge,
+      making_description: makingNote(it),
+      gst: it.settled_gst ?? it.gst, total: it.settled_total ?? it.total,
     })),
     totals: {
-      gold_value: order.subtotal, making_charge: order.making_charge, other_charges: order.other_charges, other_charges_note: order.other_charges_note,
+      gold_value: order.subtotal, making_charge: order.making_charge,
+      making_quoted: round2(items.reduce((sum, it) => sum + it.making_rate * it.net_gold_weight * it.quantity, 0)), other_charges: order.other_charges, other_charges_note: order.other_charges_note,
       gst_rate: order.gst_rate, gst: order.gst, cgst, sgst: round2(order.gst - cgst), round_off: order.round_off,
       total: order.total_amount, amount_in_words: amountInWords(order.total_amount),
     },
-    payments: payments.map((p, i) => ({ date: p.payment_date, method: p.payment_method, amount: p.amount, reference: p.reference_number, kind: kinds[i] })),
+    payments: payments.map((p, i) => ({
+      date: p.payment_date, method: p.payment_method, amount: p.amount, reference: p.reference_number, kind: kinds[i],
+      gold_rate: p.gold_rate, gold_grams: p.gold_fraction > 0 ? round3(p.gold_fraction * netWeight) : 0,
+    })),
+    gold: { net_weight: netWeight, value: order.subtotal, average_rate: netWeight > 0 ? round2(order.subtotal / netWeight) : 0, booked_rate: order.order_gold_rate, booked_total: order.booked_total || order.total_amount },
     total_paid: round2(payments.reduce((sum, p) => sum + p.amount, 0)),
     payment_methods: [...new Set(payments.map((p) => p.payment_method))],
   };

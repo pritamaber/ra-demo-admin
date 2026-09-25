@@ -62,6 +62,7 @@ module.exports = [
   ['POST', '/api/orders', ({ body }) => orders.createOrder(body)],
   ['GET', '/api/orders/:id', ({ params }) => orders.getOrder(id(params))],
   ['POST', '/api/orders/:id/accept', ({ params }) => orders.acceptOrder(id(params))],
+  ['POST', '/api/orders/:id/settlement', ({ params, body }) => orders.previewSettlement(id(params), body.adjust)],
   ['POST', '/api/orders/:id/payments', ({ params, body }) => orders.addPayment(id(params), body)],
   ['POST', '/api/orders/:id/ready', ({ params, body }) => orders.setReady(id(params), body.ready !== false)],
   ['PUT', '/api/orders/:id/delivery-date', ({ params, body }) => orders.updateDeliveryDate(id(params), body.expected_delivery_date)],

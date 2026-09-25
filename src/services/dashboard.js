@@ -19,6 +19,7 @@ function outstanding({ sort = 'overdue', filter = 'all' } = {}) {
 }
 
 function overview() {
+  orders.recalcOpenOrders(); // open orders are valued at today's gold rate
   const today = clock.today();
   const stock = products.summary();
 

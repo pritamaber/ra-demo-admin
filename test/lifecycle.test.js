@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { q } = require('../src/db');
 const { seed } = require('../src/seed');
-const { clock } = require('../src/util');
+const { clock, addDays, round2 } = require('../src/util');
 const customers = require('../src/services/customers');
 const products = require('../src/services/products');
 const orders = require('../src/services/orders');
@@ -93,17 +93,107 @@ test('Rahul Das: order at ₹14,720/g with ₹50,000 paid is accepted and partly
   });
 });
 
-test('a gold-rate change never re-prices a placed order', () => {
-  const before = rahulOrder().order;
-  const rate = goldRates.getRate('22K');
-  market.setGoldRate({ purity: '22K', rate_per_gram: rate + 400 });
-  const after = rahulOrder().order;
-  assert.equal(after.total_amount, before.total_amount);
-  assert.equal(after.outstanding_amount, before.outstanding_amount);
-  assert.equal(after.order_gold_rate, 14720);
-  // ...but a new order picks up the new rate
-  const chain = product('Classic Gold Chain');
-  assert.equal(orders.previewOrder({ items: [{ product_id: chain.id }] }).lines[0].gold_rate, rate + 400);
+test('gold-first settlement: each payment buys gold at its own day\'s rate, unpaid gold follows the market', () => {
+  // 15.6 g bracelet booked at ₹14,720/g: gold ₹2,29,632 + making ₹11,700 + GST ₹7,239.96 -> ₹2,48,572
+  const bracelet = product("Men's Bracelet");
+  const buyer = customers.findByPhone('9433012345');
+  const day1 = clock.today();
+  const day2 = addDays(day1, 1);
+  const day3 = addDays(day1, 2);
+  market.setGoldRate({ purity: '22K', rate_per_gram: 15000, effective_date: day2 });
+  market.setGoldRate({ purity: '22K', rate_per_gram: 15200, effective_date: day3 });
+  try {
+    // ---- day 1: the customer pays ₹1,50,000 = 150000 / 14720 = 10.190 g of gold
+    const o = orders.createOrder({
+      customer_id: buyer.id, items: [{ product_id: bracelet.id, gold_rate: 14720 }],
+      payment: { amount: 150000, payment_method: 'UPI' },
+    });
+    const id = o.order.id;
+    assert.equal(o.order.total_amount, 248572);
+    assert.equal(o.order.booked_total, 248572);
+    assert.equal(o.payments[0].gold_rate, 14720);
+    assert.equal(o.payments[0].gold_grams, 10.19);
+    assert.equal(o.settlement.gold_paid_grams, 10.19);
+    assert.equal(o.settlement.gold_remaining_grams, 5.41);
+    assert.equal(o.settlement.gold_remaining_value, 79632);
+    assert.equal(o.order.outstanding_amount, 98572);
+
+    // ---- day 2, gold ₹15,000/g: the 10.190 g stay locked, the remaining 5.410 g is now valued at ₹15,000
+    clock.setNow(`${day2}T10:00:00`);
+    const d2 = orders.getOrder(id);
+    assert.equal(d2.settlement.gold_paid_grams, 10.19, 'paid gold is not re-priced');
+    assert.equal(d2.settlement.gold_paid_amount, 150000);
+    assert.equal(d2.settlement.gold_remaining_value, 81146.74);
+    assert.equal(d2.settlement.gold_rate_today, 15000);
+    assert.equal(d2.order.gst, 7285.4);
+    assert.equal(d2.order.total_amount, 250132);
+    assert.equal(d2.order.booked_total, 248572, 'the original quote is kept');
+    assert.equal(d2.settlement.total_change, 1560);
+    assert.equal(d2.order.outstanding_amount, 100132);
+    assert.equal(orders.listOrders({ view: 'outstanding' }).items.find((x) => x.id === id).outstanding_amount, 100132, 'lists show the same figure');
+
+    // a part payment on day 2 buys gold at day 2's rate: 50000 / 15000 = 3.333 g
+    const p2 = orders.addPayment(id, { amount: 50000, payment_method: 'Cash' });
+    assert.equal(p2.payments[1].gold_rate, 15000);
+    assert.equal(p2.payments[1].gold_grams, 3.333);
+    assert.equal(p2.payments[1].kind, 'Part payment');
+    assert.ok(Math.abs(p2.settlement.gold_remaining_grams - 2.076) < 0.002, `remaining ${p2.settlement.gold_remaining_grams}`);
+    assert.equal(p2.order.outstanding_amount, 50132);
+
+    // ---- day 3, gold ₹15,200/g: the last 2.076 g are bought at 15,200
+    clock.setNow(`${day3}T10:00:00`);
+    const d3 = orders.getOrder(id);
+    const frac = 150000 / (15.6 * 14720) + 50000 / (15.6 * 15000);
+    const goldTotal = round2(150000 + 50000 + (1 - frac) * 15.6 * 15200);
+    const gst = round2(((goldTotal + 11700) * 3) / 100);
+    const expectedTotal = Math.round(round2(goldTotal + 11700 + gst));
+    assert.equal(d3.order.total_amount, expectedTotal);
+    assert.equal(d3.order.outstanding_amount, expectedTotal - 200000);
+    orders.acceptOrder(id);
+    assert.throws(() => orders.deliver(id, {}), /still due/);
+    const done = orders.deliver(id, { payment: { amount: d3.order.outstanding_amount, payment_method: 'Card' } });
+    assert.equal(done.order.status, 'DELIVERED');
+    assert.equal(done.order.outstanding_amount, 0);
+    assert.equal(done.settlement.gold_paid_grams, 15.6, 'all the gold is paid for');
+    assert.deepEqual(done.payments.map((x) => x.gold_rate), [14720, 15000, 15200]);
+    assert.equal(round2(done.payments.reduce((sum, x) => sum + x.gold_grams, 0)), 15.6);
+    assert.equal(done.payments[2].kind, 'Final payment');
+
+    // the bill shows the gold as it was actually bought, and stays fixed afterwards
+    const bill = bills.get(done.bill.id).bill;
+    assert.equal(bill.totals.gold_value, goldTotal);
+    assert.equal(bill.totals.gst, gst);
+    assert.equal(bill.totals.total, expectedTotal);
+    assert.equal(bill.gold.net_weight, 15.6);
+    assert.equal(bill.gold.average_rate, round2(goldTotal / 15.6));
+    assert.equal(bill.gold.booked_total, 248572);
+    assert.deepEqual(bill.payments.map((x) => [x.gold_rate, x.gold_grams > 0]), [[14720, true], [15000, true], [15200, true]]);
+    assert.equal(bill.items[0].gold_value, goldTotal);
+  } finally {
+    clock.reset();
+  }
+});
+
+test('a gold-rate change re-values the unpaid gold of open orders only', () => {
+  const before = rahulOrder().order; // 10 g booked at ₹14,720, ₹50,000 paid
+  assert.equal(before.total_amount, 160371);
+  const day = addDays(clock.today(), 3);
+  market.setGoldRate({ purity: '22K', rate_per_gram: 15120, effective_date: day });
+  try {
+    clock.setNow(`${day}T09:00:00`);
+    const res = market.setGoldRate({ purity: '22K', rate_per_gram: 15120, effective_date: day }); // re-saving today's rate re-values open orders
+    assert.ok(res.repriced_orders >= 1);
+    const after = orders.getOrder(before.id);
+    assert.equal(after.order.booked_total, 160371);
+    assert.ok(after.order.total_amount > 160371, 'unpaid gold got dearer');
+    assert.equal(after.settlement.gold_paid_amount, 50000, 'the gold already paid for is locked');
+    assert.ok(after.events.some((e) => e.event_type === 'REPRICED'));
+    // delivered orders never move
+    const delivered = orders.listOrders({ view: 'delivered' }).items[0];
+    assert.equal(orders.getOrder(delivered.id).order.total_amount, delivered.total_amount);
+  } finally {
+    clock.reset();
+  }
 });
 
 test('payments are append-only and cannot be overpaid', () => {
@@ -352,4 +442,53 @@ test('the round-off is stored on the order and printed on the bill', () => {
   assert.equal(b.gst, 7239.96);
   assert.equal(b.total, 248572);
   assert.equal(b.cgst + b.sgst, 7239.96);
+});
+
+test('the shopkeeper can change the making charge while recording a payment (customer bargains 7,500 -> 7,000)', () => {
+  const chain = product('Classic Gold Chain'); // 10 g
+  const buyer = customers.findByPhone('9748123456');
+  // gold 10 g × ₹14,000 = 140,000 · making 10 g × ₹750 = 7,500 · GST 3% of 147,500 = 4,425 -> ₹1,51,925
+  const o = orders.createOrder({
+    customer_id: buyer.id, items: [{ product_id: chain.id, gold_rate: 14000, making_rate: 750 }],
+    payment: { amount: 140000, payment_method: 'Bank Transfer' },
+  });
+  const id = o.order.id;
+  assert.equal(o.order.total_amount, 151925);
+  assert.deepEqual(o.settlement.remaining, { gold_grams: 0, gold_value: 0, making_charge: 7500, other_charges: 0, gst: 4425, round_off: 0 });
+  assert.equal(o.order.outstanding_amount, 11925);
+
+  // preview: nothing is saved
+  const trial = orders.previewSettlement(id, { making_charge: 7000 });
+  assert.deepEqual(trial.changed, ['making_charge']);
+  assert.equal(trial.settlement.remaining.making_charge, 7000);
+  assert.equal(trial.settlement.remaining.gst, 4410, 'GST follows the lower making charge');
+  assert.equal(trial.settlement.outstanding, 11410);
+  assert.equal(orders.getOrder(id).order.making_charge, 7500);
+
+  // the customer pays ₹11,410 and the shopkeeper records the agreed making charge in the same step
+  orders.acceptOrder(id);
+  assert.throws(() => orders.addPayment(id, { amount: 11500, payment_method: 'Cash', adjust: { making_charge: 7000 } }), /more than the/);
+  assert.equal(orders.getOrder(id).order.making_charge, 7500, 'a refused payment changes nothing');
+  const paid = orders.addPayment(id, { amount: 11410, payment_method: 'Cash', adjust: { making_charge: 7000, reason: 'Customer bargained' } });
+  assert.equal(paid.order.making_charge, 7000);
+  assert.equal(paid.order.gst, 4410);
+  assert.equal(paid.order.total_amount, 151410);
+  assert.equal(paid.order.outstanding_amount, 0);
+  assert.equal(paid.items[0].making_charge, 7000);
+  assert.ok(paid.events.some((e) => e.event_type === 'ADJUSTED' && /₹7,500 → ₹7,000 \(Customer bargained\)/.test(e.message)));
+  assert.equal(paid.settlement.booked.making_charge, 7500, 'the quoted making charge stays on record');
+
+  const done = orders.deliver(id, {});
+  const bill = bills.get(done.bill.id).bill;
+  assert.equal(bill.totals.making_charge, 7000);
+  assert.equal(bill.totals.making_quoted, 7500);
+  assert.match(bill.items[0].making_description, /agreed ₹7,000/);
+  assert.equal(bill.totals.total, 151410);
+  assert.equal(bill.total_paid, 151410);
+
+  // other charges can be adjusted too, and the total can never drop below what is already paid
+  const o2 = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: chain.id, gold_rate: 14000 }], other_charges: 500, payment: { amount: 140000, payment_method: 'Cash' } });
+  assert.equal(orders.addPayment(o2.order.id, { amount: 1, payment_method: 'Cash', adjust: { other_charges: 300 } }).order.other_charges, 300);
+  assert.throws(() => orders.previewSettlement(o2.order.id, { making_charge: -5 }), /at least/);
+  orders.cancelOrder(o2.order.id, 'test');
 });

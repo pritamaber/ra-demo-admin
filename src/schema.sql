@@ -85,9 +85,11 @@ CREATE TABLE IF NOT EXISTS pricing_settings (
   updated_at TEXT NOT NULL
 );
 
--- One simple price rule, locked on the order date:
---   gold = net weight x gold rate of that day; making = net weight x making rate; gst = gst% x (gold + making);
---   total = gold + making + gst + other charges. Later gold-rate changes never touch an existing order.
+-- Gold-first settlement. At booking: gold = net weight x that day's gold rate, making = net weight x making rate,
+-- gst = gst% x (gold + making), total = gold + making + gst + other, rounded to the rupee (round_off).
+-- Every payment then buys gold at ITS day's rate (payments.gold_fraction / gold_amount); the gold still unpaid is
+-- valued at today's rate, so the order's current figures move with the market until all the gold is paid for.
+-- orders.total_amount / gst / subtotal / outstanding_amount are those CURRENT figures; booked_total is the original quote.
 CREATE TABLE IF NOT EXISTS orders (
   id                     INTEGER PRIMARY KEY AUTOINCREMENT,
   order_number           TEXT NOT NULL UNIQUE,
@@ -105,7 +107,8 @@ CREATE TABLE IF NOT EXISTS orders (
   other_charges          REAL NOT NULL DEFAULT 0,
   other_charges_note     TEXT,
   round_off              REAL NOT NULL DEFAULT 0,      -- total rounded to the nearest rupee: total = gold + making + gst + other + round_off
-  total_amount           REAL NOT NULL DEFAULT 0,
+  total_amount           REAL NOT NULL DEFAULT 0,      -- current total at today's gold rate for the unpaid gold
+  booked_total           REAL NOT NULL DEFAULT 0,      -- the quote on the order date; never changes
   paid_amount            REAL NOT NULL DEFAULT 0,      -- actual money received
   outstanding_amount     REAL NOT NULL DEFAULT 0,
   notes                  TEXT,
@@ -138,7 +141,12 @@ CREATE TABLE IF NOT EXISTS order_items (
   gold_value            REAL NOT NULL,
   making_charge         REAL NOT NULL,
   gst                   REAL NOT NULL,
-  total                 REAL NOT NULL
+  total                 REAL NOT NULL,
+  -- Final figures, filled in when the order is delivered (gold bought at each payment's rate)
+  settled_gold_rate     REAL,
+  settled_gold_value    REAL,
+  settled_gst           REAL,
+  settled_total         REAL
 );
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items (order_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_product ON order_items (product_id);
@@ -149,6 +157,9 @@ CREATE TABLE IF NOT EXISTS payments (
   amount               REAL NOT NULL CHECK (amount > 0),
   payment_method       TEXT NOT NULL CHECK (payment_method IN ('Cash','UPI','Card','Bank Transfer','Other')),
   payment_date         TEXT NOT NULL,
+  gold_rate            REAL NOT NULL DEFAULT 0,        -- gold rate of the payment day (average ₹/g across the order's items)
+  gold_fraction        REAL NOT NULL DEFAULT 0,        -- share of the order's gold this payment bought (amount ÷ value of the whole gold that day)
+  gold_amount          REAL NOT NULL DEFAULT 0,        -- rupees of this payment that bought gold (the rest went to making / GST)
   reference_number     TEXT,
   notes                TEXT,
   created_at           TEXT NOT NULL
