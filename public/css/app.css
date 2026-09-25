@@ -422,6 +422,15 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
 .quick-action small { color: var(--muted); font-size: 12.5px; }
 .qa-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--maroon-soft); color: var(--maroon); display: grid; place-items: center; flex: none; }
 
+select { -webkit-appearance: none; appearance: none; padding-right: 34px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a1f2b' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center; text-overflow: ellipsis; }
+select:disabled { background-color: var(--surface-2); color: var(--muted); }
+.modal.picker { max-width: 420px; }
+.picker-list { display: grid; gap: 4px; max-height: 60vh; overflow-y: auto; margin: -6px -8px -8px; padding: 6px 8px; }
+.picker-opt { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 50px; padding: 12px 14px; border: 0; border-radius: 12px; background: none; color: var(--ink); font: inherit; font-size: 16px; text-align: left; cursor: pointer; }
+.picker-opt:active { background: var(--gold-soft); }
+.picker-opt.on { background: var(--maroon-soft); color: var(--maroon); font-weight: 650; }
+.picker-opt:disabled { opacity: .45; }
+
 /* Large tablets / small laptops */
 @media (max-width: 1180px) {
   .split, .split-wide { grid-template-columns: minmax(0, 1fr); }

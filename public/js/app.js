@@ -104,6 +104,35 @@ $('#bn-new').addEventListener('click', () => {
   };
 });
 
+// On phones every <select> opens a styled bottom sheet instead of the system picker.
+const isPhone = () => matchMedia('(max-width: 767px)').matches;
+document.addEventListener('mousedown', (e) => { const sel = e.target.closest?.('select'); if (sel && isPhone() && !sel.disabled) e.preventDefault(); });
+document.addEventListener('click', (e) => {
+  const sel = e.target.closest?.('select');
+  if (!sel || !isPhone() || sel.disabled || sel.classList.contains('native')) return;
+  const title = sel.getAttribute('aria-label') || sel.closest('.field')?.querySelector('label')?.textContent.trim() || 'Choose';
+  const { el, close } = openModal({ title, size: 'picker', content: '' });
+  const list = document.createElement('div');
+  list.className = 'picker-list';
+  [...sel.options].forEach((opt, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'picker-opt' + (i === sel.selectedIndex ? ' on' : '');
+    b.disabled = opt.disabled;
+    const t = document.createElement('span');
+    t.textContent = opt.text;
+    b.append(t);
+    if (i === sel.selectedIndex) b.insertAdjacentHTML('beforeend', '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>');
+    b.onclick = () => {
+      close();
+      if (sel.selectedIndex !== i) { sel.selectedIndex = i; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    };
+    list.append(b);
+  });
+  el.querySelector('.modal-body').append(list);
+  list.querySelector('.on')?.scrollIntoView({ block: 'center' });
+});
+
 // Tables collapse into stacked cards on phones (CSS); label each cell from its column header.
 function labelCells(root) {
   root.querySelectorAll('table.tbl').forEach((t) => {
