@@ -77,6 +77,7 @@ export async function ordersListPage({ el, query, isCurrent }) {
 function newTransactionPage(mode) {
   const isSale = mode === 'sale';
   return async function page({ el, query, isCurrent }) {
+    const onPhone = matchMedia('(max-width: 767px)').matches; // secondary fields start collapsed on a phone
     const [{ items: products }, { items: rates }] = await Promise.all([
       api.get('/api/products', { status: 'active', limit: 500, sort: 'category' }),
       api.get('/api/gold-rates/current'),
@@ -149,8 +150,9 @@ function newTransactionPage(mode) {
     }
 
     mount(el, html`
+      <div class="flow-page">
       <div class="crumb"><a href="${isSale ? '#/billing' : '#/orders'}">${isSale ? 'Billing' : 'Orders'}</a> / New</div>
-      <div class="page-head"><div><h1>${isSale ? 'New Bill' : 'New Order'}</h1>
+      <div class="page-head dash-head"><div><h1>${isSale ? 'New Bill' : 'New Order'}</h1>
         <div class="sub">${isSale ? 'Walk-in sale: pick the pieces, take the full payment, done.' : 'Pick the pieces and a delivery date. The customer can pay now or in instalments.'}</div></div></div>
       <div class="grid split-wide">
         <div class="stack">
@@ -161,12 +163,17 @@ function newTransactionPage(mode) {
             <button class="btn btn-sm" id="add-line">+ Add another item</button></div>
             <div class="card-body"><div id="lines-box"></div></div></div>
 
-          <div class="card"><div class="card-head"><div class="step-title"><span class="step-no">3</span><h2>${isSale ? 'Extras' : 'Delivery & extras'}</h2></div></div>
-            <div class="card-body form-grid">
+          <div class="card"><div class="card-head"><div class="step-title"><span class="step-no">3</span><h2>${isSale ? 'Extras' : 'Delivery date'}</h2></div></div>
+            <div class="card-body">
               ${isSale ? '' : html`<div class="field"><label for="f-delivery">Delivery date</label><input id="f-delivery" type="date" value="${addDaysIso(todayIso(), 7)}" min="${todayIso()}"><div class="hint">You can change it later.</div></div>`}
-              <div class="field"><label for="f-other">Other charges (₹)</label><input id="f-other" type="number" min="0" step="1" placeholder="0"></div>
-              <div class="field"><label for="f-other-note">Other charges note</label><input id="f-other-note" placeholder="e.g. Hallmarking, packaging"></div>
-              ${isSale ? '' : html`<div class="field"><label for="f-notes">Order notes</label><input id="f-notes" placeholder="Design remarks, delivery instructions…"></div>`}
+              <details class="item-details more-opts" ${onPhone ? '' : 'open'}>
+                <summary>More options <span class="muted small">— other charges${isSale ? '' : ', notes'}</span></summary>
+                <div class="form-grid" style="margin-top:10px">
+                  <div class="field"><label for="f-other">Other charges (₹)</label><input id="f-other" type="number" min="0" step="1" placeholder="0"></div>
+                  <div class="field"><label for="f-other-note">Other charges note</label><input id="f-other-note" placeholder="e.g. Hallmarking, packaging"></div>
+                  ${isSale ? '' : html`<div class="field full"><label for="f-notes">Order notes</label><input id="f-notes" placeholder="Design remarks, delivery instructions…"></div>`}
+                </div>
+              </details>
             </div></div>
         </div>
 
@@ -183,16 +190,24 @@ function newTransactionPage(mode) {
                   <div class="input-group"><span>₹</span><input id="f-adv" type="number" min="0" step="1" placeholder="0"></div>
                   <div class="hint">Any amount secures the pieces. <a href="#" id="pay-full">Pay the full amount</a></div></div>`}
                 <div class="field"><label for="f-method">Method</label><select id="f-method">${methodOptions('UPI')}</select></div>
-                <div class="field"><label for="f-ref">Reference no.</label><input id="f-ref" placeholder="UPI / cheque / card ref"></div>
+                <details class="item-details more-opts field" ${onPhone ? '' : 'open'}>
+                  <summary>Reference no. <span class="muted small">— optional</span></summary>
+                  <input id="f-ref" placeholder="UPI / cheque / card ref" style="margin-top:8px">
+                </details>
               </div>
               <div class="kv total" style="margin-top:14px"><span class="k">${isSale ? 'Customer pays' : 'Balance after this payment'}</span><span class="v" id="balance">—</span></div>
               <div class="form-error" id="order-error"></div>
-              <button class="btn ${isSale ? 'btn-gold' : 'btn-primary'}" id="submit-btn" style="width:100%;justify-content:center;margin-top:14px">${isSale ? 'Create bill & hand over' : 'Place order'}</button>
-              <p class="muted small" style="margin-top:10px">${isSale
+              <button class="btn desk-only ${isSale ? 'btn-gold' : 'btn-primary'}" id="submit-btn" style="width:100%;justify-content:center;margin-top:14px">${isSale ? 'Create bill & hand over' : 'Place order'}</button>
+              <p class="muted small desk-only" style="margin-top:10px">${isSale
                 ? 'The bill is generated immediately, stock is reduced and the sale is added to the customer’s history.'
                 : 'Placing the order reserves the stock and locks today’s gold rate for this order.'}</p>
             </div></div>
         </div>
+      </div>
+      <div class="action-bar">
+        <div class="ab-total"><span>${isSale ? 'Bill total' : 'Order total'}</span><b id="bar-total">—</b><small id="bar-sub"></small></div>
+        <button type="button" class="btn ${isSale ? 'btn-gold' : 'btn-primary'}" id="bar-submit">${isSale ? 'Create bill' : 'Place order'}</button>
+      </div>
       </div>`);
 
     // ---- customer list: browse or search every customer and tap one to select them
@@ -301,6 +316,7 @@ function newTransactionPage(mode) {
       if (same || value === '') delete l.edits[key]; else l.edits[key] = value;
     }
 
+    const summaryOf = (l) => `${netOf(l).toFixed(3)} g net · ${inr(Number(valueOf(l, 'gold_rate')) || 0)}/g · making ${inr(Number(valueOf(l, 'making_rate')) || 0)}/g`;
     const linesBox = $('#lines-box', el);
     const lineField = (l, key, label) => html`<div class="field"><label>${label}</label>
       <input data-e="${key}" type="number" min="0" step="${key === 'gold_rate' || key === 'making_rate' ? 1 : 0.001}" value="${valueOf(l, key)}"></div>`;
@@ -316,8 +332,8 @@ function newTransactionPage(mode) {
             <div class="field"><label>Qty</label><input data-f="quantity" type="number" min="1" max="20" value="${l.quantity}"></div>
             <button class="icon-btn" data-remove title="Remove item" ${st.lines.length === 1 ? 'disabled' : ''}>×</button>
           </div>
-          ${chosen ? html`<details class="item-details" open>
-            <summary>Item details <span class="muted small">— edit anything for this order; the catalogue is not changed</span></summary>
+          ${chosen ? html`<details class="item-details" ${onPhone ? '' : 'open'}>
+            <summary>Edit item details <span class="muted small" data-summary>${summaryOf(l)}</span></summary>
             <div class="item-fields">
               <div class="field span"><label>Item name (as on the bill)</label><input data-e="name" value="${valueOf(l, 'name')}"></div>
               <div class="field span"><label>Description</label><textarea data-e="description" rows="2" placeholder="Optional — design, size, remarks…">${valueOf(l, 'description')}</textarea></div>
@@ -349,6 +365,8 @@ function newTransactionPage(mode) {
             setEdit(l, input.dataset.e, input.value);
             const net = $('[data-net]', card);
             if (net) net.value = netOf(l).toFixed(3);
+            const sum = $('[data-summary]', card);
+            if (sum) sum.textContent = summaryOf(l);
             if (input.dataset.e === 'purity' && l.edits.gold_rate === undefined) $('[data-e=gold_rate]', card).value = valueOf(l, 'gold_rate');
             recalcSoon();
           };
@@ -404,7 +422,7 @@ function newTransactionPage(mode) {
       const t = p.totals;
       $('#rate-note', el).textContent = `Today: ${[...new Set(p.lines.map((l) => `${l.purity} ${inr(l.gold_rate)}/g`))].join(' · ')}`;
       mount(figures, html`
-        ${p.lines.map((l) => html`<div style="margin-bottom:10px">
+        ${p.lines.map((l) => html`<div class="line-detail" style="margin-bottom:10px">
           <div class="prod-cell"><img class="thumb" src="${l.image}" alt=""><button type="button" class="link-btn cell-main" data-view-product="${l.product_id}">${l.name}</button>${l.quantity > 1 ? ` × ${l.quantity}` : ''}</div>
           <div class="kv sub"><span class="k">Gold: ${grams(l.net_weight_total)} × ${perGram(l.gold_rate)}</span><span class="v">${inr(l.gold_value)}</span></div>
           <div class="kv sub"><span class="k">Making: ${grams(l.net_weight_total)} × ${perGram(l.making_rate)}</span><span class="v">${inr(l.making_charge)}</span></div></div>`)}
@@ -423,6 +441,8 @@ function newTransactionPage(mode) {
       const t = total();
       const adv = isSale ? t : Number($('#f-adv', el).value) || 0;
       $('#balance', el).textContent = t == null ? '—' : inr(isSale ? t : Math.max(t - adv, 0));
+      $('#bar-total', el).textContent = t == null ? '—' : inr(t);
+      $('#bar-sub', el).textContent = t == null ? '' : isSale ? 'Paid in full' : adv > 0 ? `Paying ${inr(adv)} now · balance ${inr(Math.max(t - adv, 0))}` : 'Nothing paid now';
     }
     if (!isSale) {
       $('#f-adv', el).addEventListener('input', updateBalance);
@@ -539,10 +559,10 @@ function newTransactionPage(mode) {
     $('#preview-btn', el).onclick = openPreview;
 
     // ---- submit
-    $('#submit-btn', el).onclick = async () => {
+    const submit = async () => {
       const err = $('#order-error', el);
       err.textContent = '';
-      const btn = $('#submit-btn', el);
+      const btns = $$('#submit-btn, #bar-submit', el);
       try {
         const body = payload();
         if (!body.items.length) throw new Error('Add at least one product');
@@ -555,7 +575,7 @@ function newTransactionPage(mode) {
         body.other_charges_note = $('#f-other-note', el).value;
         const method = $('#f-method', el).value;
         const reference_number = $('#f-ref', el).value;
-        btn.disabled = true;
+        btns.forEach((b) => { b.disabled = true; });
         if (isSale) {
           body.payment = { payment_method: method, reference_number };
           const res = await api.post('/api/sales', body);
@@ -572,9 +592,12 @@ function newTransactionPage(mode) {
         }
       } catch (e) {
         err.textContent = e.message;
-        btn.disabled = false;
+        if (onPhone) toast(e.message, 'error'); // the inline message can be off-screen behind the sticky bar
+        btns.forEach((b) => { b.disabled = false; });
       }
     };
+    $('#submit-btn', el).onclick = submit;
+    $('#bar-submit', el).onclick = submit;
   };
 }
 export const orderNewPage = newTransactionPage('order');
@@ -681,14 +704,14 @@ export async function orderDetailPage({ el, params, isCurrent }) {
     </div>
 
     <div class="grid cols-2" style="margin-top:18px">
-      <div class="card"><div class="card-head"><h2>Activity</h2></div><div class="card-body"><ul class="timeline">
-        ${[...events].reverse().map((e) => html`<li class="${e.event_type}"><div>${e.message}</div><div class="when">${fmtDateTime(e.created_at)}</div></li>`)}</ul></div></div>
-      <div class="card"><div class="card-head"><h2>Stock impact</h2></div>
+      <details class="card fold" ${window.matchMedia('(max-width: 767px)').matches ? '' : 'open'}><summary class="card-head"><h2>Activity</h2><span class="fold-chevron">›</span></summary><div class="card-body"><ul class="timeline">
+        ${[...events].reverse().map((e) => html`<li class="${e.event_type}"><div>${e.message}</div><div class="when">${fmtDateTime(e.created_at)}</div></li>`)}</ul></div></details>
+      <details class="card fold" ${window.matchMedia('(max-width: 767px)').matches ? '' : 'open'}><summary class="card-head"><h2>Stock impact</h2><span class="fold-chevron">›</span></summary>
         ${moves.length ? html`<div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Product</th><th>Movement</th><th class="num">Change</th></tr></thead>
           <tbody>${moves.map((m) => html`<tr><td class="nowrap">${fmtDate(m.created_at, false)}</td><td>${m.product_name}</td><td>${moveBadge(m.movement_type)}</td>
             <td class="num">${m.counter === 'reserved' ? 'Reserved' : 'On hand'} ${m.previous_quantity} → ${m.new_quantity}</td></tr>`)}</tbody></table></div>` : empty('No stock movements', 'Stock is reserved when the order is placed.')}
         ${o.notes ? html`<div class="card-body" style="border-top:1px solid var(--line-2)"><div class="muted small">Order notes</div><div>${o.notes}</div></div>` : ''}
-      </div>
+      </details>
     </div>`);
 
   // ---- actions
