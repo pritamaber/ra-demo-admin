@@ -123,7 +123,6 @@ export function statementArticle(m, { pageBreak = false } = {}) {
         ].filter(Boolean).join(' + ')}</div>` : ''}
       </div>
     </div>
-    <p class="inv-small">Each payment buys gold at the rate of the day it is made (₹ ÷ rate = grams). Gold already paid for stays at that rate; gold not yet paid for is valued at the day's rate until it is. Making charge and GST are added on top; GST is worked out on the final gold value plus making charge.</p>
   </article>`;
 }
 
