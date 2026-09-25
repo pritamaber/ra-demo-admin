@@ -189,7 +189,7 @@ export async function catalogPage({ el, isCurrent }) {
   const f = { gender: '', category_id: '', subcategory_id: '', purity: '', stock_status: '', q: '' };
 
   mount(el, html`
-    <div class="page-head">
+    <div class="page-head dash-head">
       <div><h1>Master Catalog</h1><div class="sub">Every piece the shop sells — by customer, category and subcategory.</div></div>
       <div class="page-actions"><button class="btn btn-primary" id="add-product">+ Add product</button></div>
     </div>
