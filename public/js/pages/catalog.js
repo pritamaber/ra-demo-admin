@@ -106,17 +106,17 @@ export function openProductForm({ product = null, categories, purities, makingMe
 
 // --------------------------------------------------------- product detail view
 export async function openProductDetail(productId, opts = {}) {
-  let { categories, purities, makingMethod, onSaved } = opts;
-  const needMeta = !categories || !purities || !makingMethod;
+  let { categories, purities, onSaved } = opts;
+  const makingMethod = 'per_gram';
+  const needMeta = !categories || !purities;
   const [p, mv, meta] = await Promise.all([
     api.get(`/api/products/${productId}`),
     api.get('/api/inventory/movements', { product_id: productId, limit: 6 }),
-    needMeta ? Promise.all([api.get('/api/categories'), api.get('/api/settings')]) : null,
+    needMeta ? api.get('/api/categories') : null,
   ]);
   if (needMeta) {
-    categories = categories || meta[0].items;
-    purities = purities || meta[0].purities;
-    makingMethod = makingMethod || meta[1].values.making_charge_method;
+    categories = categories || meta.items;
+    purities = purities || meta.purities;
   }
   const { close } = openModal({
     title: p.name,
@@ -183,9 +183,9 @@ export async function openProductDetail(productId, opts = {}) {
 
 // ------------------------------------------------------------------- catalogue
 export async function catalogPage({ el, isCurrent }) {
-  const [{ items: categories, purities }, settings] = await Promise.all([api.get('/api/categories'), api.get('/api/settings')]);
+  const { items: categories, purities } = await api.get('/api/categories');
   if (!isCurrent()) return;
-  const makingMethod = settings.values.making_charge_method;
+  const makingMethod = 'per_gram';
   const f = { gender: '', category_id: '', subcategory_id: '', purity: '', stock_status: '', q: '' };
 
   mount(el, html`

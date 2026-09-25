@@ -18,17 +18,23 @@ export async function settingsPage({ el, isCurrent }) {
   const { values, definitions } = await api.get('/api/settings');
   if (!isCurrent()) return;
   const group = (g) => definitions.filter((d) => d.group === g);
-  const pricingSelects = group('pricing').filter((d) => d.type === 'select');
-  const pricingNumbers = group('pricing').filter((d) => d.type === 'number');
 
   mount(el, html`
     <div class="page-head">
-      <div><h1>Settings</h1><div class="sub">Pricing rules, business rules and the shop details printed on bills.</div></div>
+      <div><h1>Settings</h1><div class="sub">GST, business rules and the shop details printed on bills.</div></div>
     </div>
     <form id="settings-form" class="stack">
-      <div class="card"><div class="card-head"><h2>Pricing rules</h2></div><div class="card-body">
-        <div class="notice" style="margin-bottom:16px">Every amount is calculated from these rules — nothing is hard-coded. Changes apply to all <b>open</b> orders immediately; delivered orders keep the rules that were in force when they were delivered, and each bill lists the rules it used.</div>
-        <div class="form-grid">${pricingSelects.map((d) => field(d, values[d.key]))}${pricingNumbers.map((d) => field(d, values[d.key]))}</div>
+      <div class="card"><div class="card-head"><h2>How prices are worked out</h2></div><div class="card-body">
+        <div class="notice" style="margin-bottom:16px">One simple formula for every order and bill. The gold rate is fixed on the day the order is placed — later rate changes never affect a placed order.</div>
+        <div class="stack" style="margin-bottom:16px">
+          <div class="kv"><span class="k">Gold value</span><span class="v">net weight (g) × gold rate of the day (₹/g)</span></div>
+          <div class="kv"><span class="k">Making charge</span><span class="v">net weight (g) × the product's making rate (₹/g)</span></div>
+          <div class="kv"><span class="k">GST</span><span class="v">GST % × (gold value + making charge)</span></div>
+          <div class="kv"><span class="k">Other charges</span><span class="v">optional flat amount per order (no GST)</span></div>
+          <div class="kv total"><span class="k">Total</span><span class="v">gold + making + GST + other charges</span></div>
+        </div>
+        <div class="form-grid">${group('pricing').map((d) => field(d, values[d.key]))}</div>
+        <div class="hint" style="margin-top:8px">A new GST rate applies to orders placed from now on.</div>
       </div></div>
 
       <div class="card"><div class="card-head"><h2>Business rules</h2></div><div class="card-body form-grid three">${group('business').map((d) => field(d, values[d.key]))}</div></div>
@@ -48,8 +54,8 @@ export async function settingsPage({ el, isCurrent }) {
     </div>`);
 
   onSubmit($('#settings-form', el), async (v) => {
-    const res = await api.put('/api/settings', v);
-    toast(`Settings saved${res.repriced_orders ? ` — ${res.repriced_orders} open order${res.repriced_orders === 1 ? '' : 's'} re-priced` : ''}`);
+    await api.put('/api/settings', v);
+    toast('Settings saved');
   });
 
   $('#reset-demo', el).addEventListener('click', async () => {

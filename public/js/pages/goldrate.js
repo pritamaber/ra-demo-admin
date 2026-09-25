@@ -29,7 +29,7 @@ export async function goldRatePage({ el, isCurrent }) {
 
   mount(el, html`
     <div class="page-head">
-      <div><h1>Gold Rate Master</h1><div class="sub">Set today's rate. Every earlier rate is kept, and orders keep the rate that applied to each of their transactions.</div></div>
+      <div><h1>Gold Rate Master</h1><div class="sub">Set today's rate. It is used for orders and bills made from now on — every placed order keeps the rate of the day it was placed, and every earlier rate is kept.</div></div>
     </div>
     <div class="rate-tiles">
       ${current.map((r) => html`<div class="rate-tile ${r.purity === '22K' ? 'main' : ''}">
@@ -56,7 +56,7 @@ export async function goldRatePage({ el, isCurrent }) {
           <div class="form-error"></div>
           <button class="btn btn-primary" type="submit" style="justify-content:center">Save new rate</button>
         </form>
-        <div class="notice" style="margin-top:14px">The other two purities are calculated automatically from this one (24K 99.99% · 22K 91.6% · 18K 75% fineness) — you only ever need to enter whichever rate you're given. Saving adds new dated entries — nothing is overwritten. Open orders using <b>delivery-date settlement</b> are re-priced straight away; delivered orders never change.</div>
+        <div class="notice" style="margin-top:14px">The other two purities are calculated automatically from this one (24K 99.99% · 22K 91.6% · 18K 75% fineness) — you only ever need to enter whichever rate you're given. Saving adds new dated entries — nothing is overwritten. The new rate applies to orders placed from now on; orders already placed keep the price they were given.</div>
       </div></div>
     </div>`);
 
@@ -85,7 +85,7 @@ export async function goldRatePage({ el, isCurrent }) {
   onSubmit($('#rate-form', el), async (v) => {
     const res = await api.post('/api/gold-rates', { ...v, rate_per_gram: Number(v.rate_per_gram) });
     const others = res.derived.map((r) => `${r.purity} ${inr(r.rate_per_gram)}/g`).join(', ');
-    toast(`${res.rate.purity} set to ${inr(res.rate.rate_per_gram)}/g — ${others} auto-updated${res.repriced_orders ? ` — ${res.repriced_orders} open order${res.repriced_orders === 1 ? '' : 's'} re-priced` : ''}`);
+    toast(`${res.rate.purity} set to ${inr(res.rate.rate_per_gram)}/g — ${others} auto-updated`);
     ratesChanged();
     refresh();
   });

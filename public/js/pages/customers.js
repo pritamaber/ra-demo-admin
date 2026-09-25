@@ -106,6 +106,7 @@ export async function customerProfilePage({ el, params, isCurrent }) {
           <div class="muted" style="margin-top:2px">${[c.address, c.city].filter(Boolean).join(', ') || 'No address on file'}</div></div></div>
       <div class="page-actions">
         <a class="btn btn-primary" href="#/orders/new?customer=${c.id}">+ New Order</a>
+        <a class="btn" href="#/billing/new?customer=${c.id}">+ New Bill</a>
         <a class="btn" target="_blank" rel="noopener" href="${waLink(c.phone, reminder)}">WhatsApp</a>
         <button class="btn" id="edit-customer">Edit</button>
       </div>
@@ -139,7 +140,7 @@ export async function customerProfilePage({ el, params, isCurrent }) {
       <tbody>${bills.map((b) => html`<tr><td><a class="cell-main" href="#/bills/${b.id}">${b.bill_number}</a></td><td>${fmtDate(b.bill_date)}</td>
         <td><a href="#/orders/${b.order_id}">${b.order_number}</a></td><td>${b.products}</td><td class="num bold">${inr(b.total_amount)}</td>
         <td class="right"><a class="btn btn-sm" href="#/bills/${b.id}">View / Print</a></td></tr>`)}</tbody></table></div>`
-      : empty('No final bills yet', 'A bill appears here after an order is delivered, settled and billed.')}</div>
+      : empty('No final bills yet', 'A bill appears here as soon as an order is delivered or a walk-in bill is created.')}</div>
 
     <div data-panel="payments" class="card" hidden>${payments.length ? html`<div class="table-wrap"><table class="tbl">
       <thead><tr><th>Date</th><th>Order</th><th>Method</th><th>Reference</th><th class="num">Amount</th></tr></thead>

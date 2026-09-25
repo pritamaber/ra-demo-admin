@@ -1,6 +1,6 @@
 import { $, $$, api, html, raw, openModal, mount, icon, inr, debounce, navigate, toast } from './lib.js';
 import { dashboardPage } from './pages/dashboard.js';
-import { ordersListPage, orderNewPage, orderDetailPage, orderSlipPage } from './pages/orders.js';
+import { ordersListPage, orderNewPage, saleNewPage, orderDetailPage, orderSlipPage } from './pages/orders.js';
 import { billingPage, billViewPage } from './pages/billing.js';
 import { customersPage, customerProfilePage, openCustomerForm } from './pages/customers.js';
 import { catalogPage, openProductForm } from './pages/catalog.js';
@@ -26,6 +26,7 @@ const ROUTES = [
   [/^\/orders\/(\d+)$/, orderDetailPage, 'Order', '/orders'],
   [/^\/orders\/(\d+)\/slip$/, orderSlipPage, 'Order Slip', '/orders'],
   [/^\/billing$/, billingPage, 'Billing', '/billing'],
+  [/^\/billing\/new$/, saleNewPage, 'New Bill', '/billing'],
   [/^\/bills\/(\d+)$/, billViewPage, 'Final Bill', '/billing'],
   [/^\/customers$/, customersPage, 'Customers', '/customers'],
   [/^\/customers\/(\d+)$/, customerProfilePage, 'Customer', '/customers'],
@@ -89,7 +90,8 @@ $('#bn-new').addEventListener('click', () => {
   const { el, close } = openModal({
     title: 'Create new',
     content: html`<div class="quick-actions">
-      <a class="quick-action" href="#/orders/new" data-close><span class="qa-ic">${icon('orders', 22)}</span><span><b>New order</b><small>Start a sale for a customer</small></span></a>
+      <a class="quick-action" href="#/orders/new" data-close><span class="qa-ic">${icon('orders', 22)}</span><span><b>New order</b><small>Customer books and collects later</small></span></a>
+      <a class="quick-action" href="#/billing/new" data-close><span class="qa-ic">${icon('billing', 22)}</span><span><b>New bill</b><small>Walk-in sale, paid in full</small></span></a>
       <button type="button" class="quick-action" data-qa="customer"><span class="qa-ic">${icon('customers', 22)}</span><span><b>New customer</b><small>Add a customer profile</small></span></button>
       <button type="button" class="quick-action" data-qa="product"><span class="qa-ic">${icon('catalog', 22)}</span><span><b>Add to master catalog</b><small>Add a new jewellery product</small></span></button>
     </div>`,
@@ -98,8 +100,8 @@ $('#bn-new').addEventListener('click', () => {
   el.querySelector('[data-qa="product"]').onclick = async () => {
     close();
     try {
-      const [{ items: categories, purities }, settings] = await Promise.all([api.get('/api/categories'), api.get('/api/settings')]);
-      openProductForm({ categories, purities, makingMethod: settings.values.making_charge_method, onSaved: () => window.dispatchEvent(new Event('app:refresh')) });
+      const { items: categories, purities } = await api.get('/api/categories');
+      openProductForm({ categories, purities, makingMethod: 'per_gram', onSaved: () => window.dispatchEvent(new Event('app:refresh')) });
     } catch (err) { toast(err.message, 'error'); }
   };
 });

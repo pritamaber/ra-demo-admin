@@ -75,17 +75,17 @@ export function relDays(n) {
   if (n === -1) return 'yesterday';
   return n > 0 ? `in ${n} days` : `${-n} days ago`;
 }
-export const makingUnit = (method) => ({ per_gram: '₹ per gram', fixed_per_piece: '₹ per piece', percent_of_gold: '% of gold value' }[method] || '');
-export const makingText = (method, rate) => (method === 'fixed_per_piece' ? `${inr(rate)}/piece` : method === 'percent_of_gold' ? `${rate}%` : `${inr(rate)}/g`);
+// Making charge is always rupees per gram of net gold.
+export const makingUnit = () => '₹ per gram';
+export const makingText = (_method, rate) => `${inr(rate)}/g`;
 export const initials = (name) => name.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
 // ---------------------------------------------------------------- badges
 const STATUS = {
-  DRAFT: ['Draft', 'gray'], CONFIRMED: ['Confirmed', 'blue'], ADVANCE_RECEIVED: ['Advance Received', 'amber'],
-  PARTIALLY_PAID: ['Partially Paid', 'orange'], READY_FOR_DELIVERY: ['Ready for Delivery', 'teal'], FULLY_PAID: ['Fully Paid', 'green'],
-  DELIVERED: ['Delivered', 'green'], BILLED: ['Final Bill Generated', 'purple'], CANCELLED: ['Cancelled', 'red'],
+  PLACED: ['Order Placed', 'blue'], ACCEPTED: ['Accepted', 'amber'], READY: ['Ready for Delivery', 'teal'],
+  DELIVERED: ['Delivered', 'green'], CANCELLED: ['Cancelled', 'red'],
 };
-export const STATUS_FLOW = ['DRAFT', 'CONFIRMED', 'ADVANCE_RECEIVED', 'PARTIALLY_PAID', 'READY_FOR_DELIVERY', 'FULLY_PAID', 'DELIVERED', 'BILLED'];
+export const STATUS_FLOW = ['PLACED', 'ACCEPTED', 'READY', 'DELIVERED'];
 export const statusLabel = (s) => STATUS[s]?.[0] || s;
 export const statusBadge = (s) => html`<span class="badge ${STATUS[s]?.[1] || 'gray'}">${STATUS[s]?.[0] || s}</span>`;
 export const dueBadge = (flag) => ({
@@ -100,8 +100,8 @@ export const stockBadge = (s) => ({
 }[s] || '');
 export const paymentBadge = (s) => ({
   UNPAID: html`<span class="badge gray">Unpaid</span>`,
-  PARTIALLY_PAID: html`<span class="badge orange">Partially Paid</span>`,
-  FULLY_PAID: html`<span class="badge green">Fully Paid</span>`,
+  PARTIAL: html`<span class="badge orange">Partly Paid</span>`,
+  PAID: html`<span class="badge green">Paid</span>`,
 }[s] || '');
 export const moveBadge = (t) => {
   const color = { OPENING: 'gray', RESTOCK: 'green', ADJUSTMENT: 'blue', RESERVE: 'amber', RELEASE: 'teal', SALE: 'purple' }[t] || 'gray';

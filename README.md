@@ -1,10 +1,10 @@
 # RA Jewellers — Store Management (working demo)
 
 An end-to-end demo of a jewellery-store management system built around one idea: **the Order is the transaction.**
-Products, customers, advance payments, gold-rate changes, delivery settlement, stock and the final bill all hang off it.
+Products, customers, payments, delivery, stock and the final bill all hang off it.
 
 ```
-Product → Customer → Order → Payments → Delivery → Final Settlement → Final Bill
+Product → Customer → Order → Payments → Delivery → Final Bill
 ```
 
 ## Run it
@@ -26,51 +26,55 @@ Open **http://localhost:3000**. The first start creates `data/jewellery.db` and 
 > The sample data is dated relative to the day it is created, so "due today" and "overdue" always make sense.
 > If the project lives in a cloud-synced folder (OneDrive etc.), point the database somewhere local with `DB_PATH=C:\data\jewellery.db npm start`.
 
-## Try the full lifecycle (2 minutes)
+## How it works
 
-The dashboard has this as a guided card. The scenario is Rahul Das — 22K Classic Gold Chain, 10 g, ordered at ₹14,720/g with a ₹50,000 UPI advance.
+There are two ways a customer buys, and both end in the same **final bill**.
 
-1. **Gold Rate** → set 22K to **₹15,000**. Open orders are re-priced immediately (the toast says how many).
-2. **Orders → ORD-…-0007 (Rahul Das)**. Read the three settlement columns:
-   *Original order* (₹1,60,371 at ₹14,720/g) → *Payments received* (₹50,000) → *Delivery settlement* (₹1,63,255 at ₹15,000/g, ₹1,13,255 outstanding).
-3. **Settle & Deliver** → take the balance. The order becomes *Delivered*, stock drops by one, and the rate and rules are frozen.
-4. **Generate Final Bill** → a printable bill (Print / Save as PDF).
-5. Check **Customers → Rahul Das → Final bills**, the **Dashboard** (outstanding has fallen by ₹1,13,255 and he has left the list) and **Inventory → Stock movements** (`Reserve` then `Sale`).
+**Order** — the customer books ahead, pays in instalments (or all at once) to secure the pieces, and collects on the delivery date.
 
-Other things worth clicking: search any customer by **phone number** in the top bar · **+ New Order** (live pricing, new customers created on the spot) ·
-**Inventory → Out of stock → Restock** · **Settings** (change a pricing rule and watch open orders re-price) · **Billing → Ready to bill**.
+```
+Order Placed → Accepted → Ready for Delivery → Delivered  (final bill created automatically)
+```
 
-## How money works
+- **Payment is tracked separately** from the order status: *Unpaid → Partly paid → Paid*. Take any number of payments, in any amounts, before or after the order is accepted.
+- The **delivery date can be changed** any time before delivery.
+- **Deliver** needs the balance to be zero — the last payment can be taken in the same step. Delivery reduces stock and generates the final bill automatically.
+- An open order can be **cancelled**; reserved stock is released and payments already taken stay in the history.
 
-Every amount is calculated by one engine (`src/services/pricing.js`) from weights, rates and **configurable rules** — nothing about the shop's accounting is hard-coded.
+**Walk-in bill** (Billing → *New Bill*) — the customer is in the shop: pick the customer and items, take the full payment, done. The sale is placed, paid, delivered and billed in one step.
 
-Default configuration (change it in **Settings → Pricing rules**):
+### The price formula
 
-| Rule | Default | Alternatives |
-| --- | --- | --- |
-| Gold value at settlement | Recalculate at the **delivery-date** rate | Lock at the order-date rate |
-| Advance payments | **Monetary credit** (₹1 paid = ₹1 credit) | **Gold-equivalent credit** (each payment → grams at its own rate → valued at the settlement rate) |
-| Making charge method | ₹ **per gram** of net gold | Fixed per piece · % of gold value |
-| Making charge at delivery | **Fixed** from the order date | Recalculate at delivery |
-| GST | **3%** on gold + making | Gold only · gold + making + other charges |
-| Other charges | ₹0, editable per order | Default amount in settings |
-| Rounding | Nearest rupee on each amount | Keep paise · optional ₹10 / ₹100 round-off on the total |
+One formula for every order and bill, **fixed on the day the order is placed** — later gold-rate changes never touch a placed order.
 
-- A payment is stored as the **rupee amount actually received**, with the gold rate on the payment date and the gold-equivalent (`amount ÷ rate`, full precision, rounded only for display). The grams are informational — the rupees are authoritative.
-- Payments are **append-only**: the database rejects edits and deletes.
-- The **original estimate** and the **order-date rate** never change. Until delivery, the *current* amount payable follows the rules; on delivery the rate and the rules are **frozen** onto the order, and the bill lists the rules it used.
-- Gold rates are **dated and never overwritten** — the applicable rate for a date is the latest entry effective on or before it.
+```
+gold value = net weight (g) × gold rate of that day (₹/g)
+making     = net weight (g) × the product's making rate (₹/g)
+GST        = GST% × (gold value + making)                  → 3% by default
+total      = gold value + making + GST + other charges     (other charges: optional, no GST)
+```
 
-## Order lifecycle
+Every amount is rounded to the rupee. The only pricing setting is the GST rate (Settings); a new rate applies to orders placed from then on.
+Example: 10 g at ₹14,720/g with ₹850/g making → ₹1,47,200 + ₹8,500 + ₹4,671 GST = **₹1,60,371**.
 
-`Draft → Confirmed → Advance Received → Partially Paid → Ready for Delivery → Fully Paid → Delivered → Final Bill Generated`, plus `Cancelled`.
+- Payments are stored as the **rupee amount received** (with method, date and reference) and are **append-only**: the database rejects edits and deletes.
+- Gold rates are **dated and never overwritten** — an order is priced with the rate effective on its order date.
+- A bill is created only from a delivered, fully paid order and cannot be edited afterwards.
 
-Payment progress is derived automatically; *Ready for Delivery* is a manual mark by the shop.
-"Advance Received" means money has come in but less than the **required advance** (10% by default); from there it is "Partially Paid".
-A bill can only be generated from a delivered order with nothing outstanding, and issued bills cannot be edited.
-
-**Stock** is tracked as *on hand*, *reserved* (held for open orders), *available* (= on hand − reserved) and *sold*. Confirming an order reserves stock; cancelling releases it; delivery consumes it.
+**Stock** is tracked as *on hand*, *reserved* (held for open orders), *available* (= on hand − reserved) and *sold*. Placing an order reserves stock; cancelling releases it; delivery consumes it.
 Every change is written to the stock-movement ledger with the previous quantity, change, type, reason and related order.
+
+## Try it (2 minutes)
+
+The dashboard has this as a guided card. The scenario is Rahul Das — 22K Classic Gold Chain, 10 g, ordered at ₹14,720/g with a ₹50,000 UPI payment.
+
+1. **Orders → ORD-…-0007 (Rahul Das)**: total ₹1,60,371, paid ₹50,000, balance ₹1,10,371 — the price stays as booked whatever the gold rate does.
+2. **Mark Ready**, then **Deliver** → take the balance. The order becomes *Delivered*, stock drops by one and the **final bill is generated automatically**.
+3. Check **Customers → Rahul Das → Final bills**, the **Dashboard** (outstanding has fallen by ₹1,10,371) and **Inventory → Stock movements** (`Reserve` then `Sale`).
+4. **Billing → New Bill** for a walk-in customer, **+ New Order** to book one (new customers are added on the spot), **Inventory → Out of stock → Restock**.
+
+> Upgrading from an older version? The first start after this change saves your previous database next to it
+> (`data/jewellery.db-backup-pre-v2-…`) and loads the demo data again, because the order model changed shape.
 
 ## Data model
 
@@ -84,7 +88,7 @@ SQLite (`src/schema.sql`): `customers`, `categories` (category → subcategory),
 ```
 server.js              HTTP server (no framework), static files, JSON errors
 src/schema.sql         relational schema
-src/services/          pricing · orders · products (catalogue + stock) · customers · bills · goldrates · settings · dashboard · market
+src/services/          pricing · orders · sales (walk-in bills) · products (catalogue + stock) · customers · bills · goldrates · settings · dashboard · market
 src/routes.js          REST API (see below)
 src/seed.js            sample data, replayed through the real services with a back-dated clock
 public/                single-page app in plain ES modules (no build step)
@@ -98,9 +102,9 @@ test/lifecycle.test.js end-to-end tests of the rules above
 `GET|POST /api/categories` · `PUT /api/categories/:id`
 `GET|POST /api/products` · `GET|PUT|DELETE /api/products/:id` · `POST /api/products/:id/stock`
 `GET /api/inventory/summary` · `GET /api/inventory/movements`
-`GET|POST /api/orders` · `POST /api/orders/preview` · `GET|DELETE /api/orders/:id`
-`POST /api/orders/:id/{confirm|payments|ready|deliver|cancel|bill}`
-`GET /api/billing/overview` · `GET /api/bills` · `GET /api/bills/:id`
+`GET|POST /api/orders` · `POST /api/orders/preview` · `GET /api/orders/:id` · `PUT /api/orders/:id/delivery-date`
+`POST /api/orders/:id/{accept|payments|ready|deliver|cancel}`
+`POST /api/sales` (walk-in bill) · `GET /api/billing/overview` · `GET /api/bills` · `GET /api/bills/:id`
 `GET /api/gold-rates` · `GET /api/gold-rates/current` · `POST /api/gold-rates`
 `GET|PUT /api/settings` · `POST /api/admin/reset`
 `GET /api/public/categories` · `GET /api/public/products` (CORS-enabled, read-only — see "Public website")
@@ -109,7 +113,7 @@ test/lifecycle.test.js end-to-end tests of the rules above
 
 ## Sample data
 
-8 customers · 28 products in 10 categories (22 subcategories) · 9 orders in different states (unpaid, advance received, partially paid, overdue, ready for delivery, delivered awaiting bill, billed ×2, cancelled — drafts and fully-paid orders you can create yourself) · 13 payments by cash, UPI, card and bank transfer · 46 stock movements · a month of 24K/22K/18K rate history · 2 low-stock and 2 out-of-stock products.
+8 customers · 28 products in 10 categories (22 subcategories) · 10 orders in different states (placed, accepted and part-paid, overdue, due today, ready for delivery, delivered ×3, cancelled) plus a walk-in bill · payments by cash, UPI, card and bank transfer · a month of 24K/22K/18K rate history · 2 low-stock and 2 out-of-stock products.
 Shop name, address and GSTIN on bills are placeholders (editable in Settings).
 
 ## Public website (Supabase sync)
