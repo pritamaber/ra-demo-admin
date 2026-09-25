@@ -593,9 +593,10 @@ button, .btn, .chip, .tab, a.kpi { touch-action: manipulation; -webkit-tap-highl
   .bottom-nav .bn-new svg { background: var(--maroon); color: #fff; border-radius: 50%; padding: 6px; width: 34px; height: 34px; margin-top: -14px; box-shadow: 0 3px 10px rgba(122, 31, 43, .4); }
 }
 
-/* very small phones */
+/* small phones (360px Android etc.) keep two product columns */
 @media (max-width: 380px) {
-  .products, .pp-cats { grid-template-columns: minmax(0, 1fr); }
+  .product .name { font-size: 14px; }
+  .spec { font-size: 11px; padding: 1px 6px; }
   .kpi-value { font-size: 17px; }
   .rate-chips .rate-chip:nth-child(n+3) { display: none; }
 }
