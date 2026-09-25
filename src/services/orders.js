@@ -42,10 +42,14 @@ function logEvent(orderId, type, message) {
 const lineNetWeight = (it) => round3(it.net_gold_weight * it.quantity);
 const netWeightTotal = (items) => round3(items.reduce((sum, it) => sum + lineNetWeight(it), 0));
 
-/** Value of the WHOLE order's gold on `date`: the booked rates on the order date (negotiated rates included),
- *  that day's market rate for each purity afterwards. */
+/** Value of the WHOLE order's gold on `date` at that day's market rate for each purity — so a gold-rate change is
+ *  picked up straight away, even on the day the order was placed. The one exception is a rate the shopkeeper
+ *  negotiated for an item at booking: that is kept for the order date itself. */
 function goldValueOn(order, items, date) {
-  return round2(items.reduce((sum, it) => sum + lineNetWeight(it) * (date <= order.order_date ? it.gold_rate : goldRates.getRate(it.purity, date)), 0));
+  return round2(items.reduce((sum, it) => {
+    const rate = it.gold_rate_locked && date <= order.order_date ? it.gold_rate : goldRates.getRate(it.purity, date);
+    return sum + lineNetWeight(it) * rate;
+  }, 0));
 }
 
 /** Where the order stands on `date` (default today): gold paid so far, gold still owed at that day's rate, total, balance. */
@@ -194,7 +198,7 @@ function buildQuote(rawItems, otherChargesInput) {
     const description = l.description ?? null;
     const edited = name !== product.name || purity !== product.purity || gross !== product.gross_weight || stone !== product.stone_weight
       || making_rate !== product.making_charge || l.gold_rate != null || description != null;
-    return { product, quantity: l.quantity, name, description, purity, gross, stone, net, making_rate, rate, edited, demand: demand.get(l.product_id) };
+    return { product, quantity: l.quantity, name, description, purity, gross, stone, net, making_rate, rate, negotiated: l.gold_rate != null, edited, demand: demand.get(l.product_id) };
   });
   const otherCharges = otherChargesInput == null || otherChargesInput === '' ? 0 : num(otherChargesInput, 'Other charges', { min: 0 });
   const priced = pricing.priceOrder({
@@ -259,10 +263,10 @@ function insertItem(orderId, row, line) {
   const p = row.product;
   q.run(
     `INSERT INTO order_items (order_id, product_id, product_name, description, sku, barcode, metal_type, purity, quantity, gross_weight, stone_weight,
-       making_rate, gold_rate, gold_value, making_charge, gst, total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       making_rate, gold_rate, gold_rate_locked, gold_value, making_charge, gst, total)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     orderId, p.id, row.name, row.description, p.sku, p.barcode, p.metal_type, row.purity, row.quantity, row.gross, row.stone,
-    row.making_rate, line.gold_rate, line.gold_value, line.making_charge, line.gst, line.total);
+    row.making_rate, line.gold_rate, row.negotiated ? 1 : 0, line.gold_value, line.making_charge, line.gst, line.total);
 }
 
 /**

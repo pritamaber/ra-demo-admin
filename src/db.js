@@ -88,6 +88,7 @@ function migrate() {
   if (!orderCols.includes('booked_total')) db.exec('ALTER TABLE orders ADD COLUMN booked_total REAL NOT NULL DEFAULT 0');
   const itemCols = db.prepare("PRAGMA table_info(order_items)").all().map((c) => c.name);
   if (!itemCols.includes('description')) db.exec('ALTER TABLE order_items ADD COLUMN description TEXT');
+  if (!itemCols.includes('gold_rate_locked')) db.exec('ALTER TABLE order_items ADD COLUMN gold_rate_locked INTEGER NOT NULL DEFAULT 0');
   for (const col of ['settled_gold_rate', 'settled_gold_value', 'settled_gst', 'settled_total']) {
     if (!itemCols.includes(col)) db.exec(`ALTER TABLE order_items ADD COLUMN ${col} REAL`);
   }

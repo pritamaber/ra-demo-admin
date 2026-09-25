@@ -492,3 +492,33 @@ test('the shopkeeper can change the making charge while recording a payment (cus
   assert.throws(() => orders.previewSettlement(o2.order.id, { making_charge: -5 }), /at least/);
   orders.cancelOrder(o2.order.id, 'test');
 });
+
+test('a gold-rate change is picked up the same day; a negotiated rate is kept for the order date', () => {
+  const ring = product('Plain Band Ring');
+  const buyer = customers.findByPhone('9007123456');
+  const idBefore = q.get('SELECT COALESCE(MAX(id), 0) AS n FROM gold_rates').n;
+  const rate = goldRates.getRate('22K');
+  try {
+    const market = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: ring.id }], payment: { amount: 10000, payment_method: 'Cash' } });
+    const fixed = orders.createOrder({ customer_id: buyer.id, items: [{ product_id: ring.id, gold_rate: rate }], payment: { amount: 10000, payment_method: 'Cash' } });
+    assert.equal(market.settlement.gold_rate_today, rate);
+    // the owner updates the gold rate later the same day
+    const res = require('../src/services/market').setGoldRate({ purity: '22K', rate_per_gram: rate + 300 });
+    assert.ok(res.repriced_orders >= 1);
+    const m = orders.getOrder(market.order.id);
+    assert.equal(m.settlement.gold_rate_today, rate + 300, 'the unpaid gold is valued at the new rate straight away');
+    assert.ok(m.order.total_amount > market.order.total_amount);
+    assert.equal(m.settlement.gold_paid_amount, 10000, 'the gold already paid for is locked');
+    assert.equal(m.settlement.remaining.gold_grams, market.settlement.remaining.gold_grams);
+    // a payment now buys gold at the new rate
+    const paid = orders.addPayment(market.order.id, { amount: 5000, payment_method: 'UPI' });
+    assert.equal(paid.payments[1].gold_rate, rate + 300);
+    assert.ok(paid.payments[1].gold_grams < paid.payments[0].gold_grams / 2, 'dearer gold: fewer grams for the same money');
+    // a negotiated rate holds until the order date has passed
+    assert.equal(orders.getOrder(fixed.order.id).settlement.gold_rate_today, rate);
+    orders.cancelOrder(market.order.id, 'test');
+    orders.cancelOrder(fixed.order.id, 'test');
+  } finally {
+    q.run('DELETE FROM gold_rates WHERE id > ?', idBefore);
+  }
+});

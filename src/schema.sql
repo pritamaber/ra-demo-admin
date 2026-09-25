@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   net_gold_weight       REAL GENERATED ALWAYS AS (round(gross_weight - stone_weight, 3)) VIRTUAL,
   making_rate           REAL NOT NULL,                 -- rupees per gram of net gold
   gold_rate             REAL NOT NULL,                 -- rupees per gram on the order date
+  gold_rate_locked      INTEGER NOT NULL DEFAULT 0,    -- 1 when the shopkeeper negotiated this rate: it is kept for the order date itself
   gold_value            REAL NOT NULL,
   making_charge         REAL NOT NULL,
   gst                   REAL NOT NULL,
